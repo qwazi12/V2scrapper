@@ -55,7 +55,7 @@ def owner(request: Request, c=Depends(db)):
         WHERE s.token_hash=%s AND s.expires_at>now() AND s.revoked_at IS NULL AND u.active=true""",
         (hash_token(token),),
     )
-    require(session, "UNAUTHENTICATED", "Sign in to the local owner workspace", 401)
+    require(session, "UNAUTHENTICATED", "Sign in to the owner workspace", 401)
     if request.method not in ("GET", "HEAD", "OPTIONS"):
         origin(request)
         supplied = request.headers.get("x-csrf-token", "")

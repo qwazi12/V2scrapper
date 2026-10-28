@@ -11,10 +11,16 @@ if (
     "SCOS_API_URL must be an HTTP(S) origin without credentials or a path",
   );
 }
-if (process.env.VERCEL && url.protocol !== "https:") {
+if (
+  (process.env.VERCEL ||
+    process.env.SCOS_ENV === "staging" ||
+    process.env.SCOS_ENV === "production") &&
+  url.protocol !== "https:"
+) {
   throw new Error("Hosted frontend requires an HTTPS API origin");
 }
 const config: NextConfig = {
+  output: "standalone",
   distDir: process.env.NODE_ENV === "development" ? ".next-dev" : ".next",
   async rewrites() {
     return [

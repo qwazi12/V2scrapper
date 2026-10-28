@@ -21,14 +21,23 @@ The original working local release is preserved on GitHub `main` at `175c5a56d97
 - PostgreSQL: `scos-postgres`, database `scos_staging`, dedicated persistent volume.
 - Private S3 bucket: `scos-staging-media` in `iad`. Credentials are Railway reference variables, never copied into source.
 - API: `scos-api`; worker: `scos-media-worker`. Separate memory/CPU limits. Worker has no public domain.
+- Frontend: `scos-web` on Railway, `https://scos-web-staging.up.railway.app`. Its server proxies the API through the same origin. This provides staging while Vercel team consent is pending.
 - Vercel project: `screen-central-os-staging` / `prj_HiGZPPkEqxaNVUOQaTmgMY65nQXv`. Team authorization is needed before frontend configuration/deployment.
 
 No existing Scrapper resource is modified. No production deployment is approved.
 
+Railway service settings explicitly select `Dockerfile` for API/worker and `Dockerfile.web` for the frontend. No deprecated `railway.json` is required. Each source is pinned to a reviewed Git commit. The frontend container uses Next's standalone output and contains no API/database/storage secrets.
+
+### Hosted verification
+
+PostgreSQL, API and worker deployed successfully from `52ffe7632953dc8969dfabb427078ee7c16d8ead`. Public readiness confirms the database and private bucket. Anonymous workspace access returns 401, local fixture login returns 403, and an unconfigured Google login returns 503. A synthetic 18-second narrated portrait render inside the Railway worker passed profile, H.264, audio, full decode, duration and loudness checks and was retrieved from private S3. Editorial approval remains required. This smoke does not replace an authenticated browser-to-queue-to-media test.
+
+GitHub Actions run `40782296015` passed the full isolated Linux test stack. The connected GitHub integration rejected draft PR creation with 403; the branch is pushed and reviewable directly.
+
 ## Required owner setup
 
 1. Authorize the existing Vercel connection for the `qwazi12s-projects` team using the provider consent link supplied in chat.
-2. Select the owner Google email and register a **new SCOS-specific** Google web OAuth client. Configure the exact staging callback URL shown after the frontend hostname is verified: `https://<staging-host>/api/v1/auth/oidc/callback`.
+2. Select the owner Google email and register a **new SCOS-specific** Google web OAuth client. After the Railway frontend hostname is verified, the callback is `https://scos-web-staging.up.railway.app/api/v1/auth/oidc/callback`. If staging moves to Vercel, update the API's `SCOS_PUBLIC_URL` and the Google registered callback together.
 3. Set `SCOS_OIDC_CLIENT_ID`, `SCOS_OIDC_CLIENT_SECRET`, and `SCOS_OWNER_EMAIL` directly in the new Railway staging service settings. Never paste secrets in chat or commit them. The `scos-api` service needs the login secret; the renderer does not.
 4. Complete Google sign-in yourself. This flow asks only `openid email profile`, not YouTube publishing or Meta access.
 5. Complete a separate app-specific, scope-limited YouTube/Meta/AI/vidIQ setup after adapters and capability tests are ready. A Codex connector does not transfer its grants to this app. Paid calls stay blocked until a budget is explicitly set.

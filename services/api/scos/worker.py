@@ -259,7 +259,9 @@ def main():
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
-    print("SCOS local worker ready; live writes and paid calls disabled", flush=True)
+    from .config import ENV
+
+    print(f"SCOS {ENV} worker ready; live writes and paid calls disabled", flush=True)
     while not STOP:
         if not tick(owner):
             time.sleep(1)

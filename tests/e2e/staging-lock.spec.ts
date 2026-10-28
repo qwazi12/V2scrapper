@@ -1,0 +1,22 @@
+import { test, expect } from "../../apps/web/node_modules/@playwright/test";
+
+test("hosted frontend proxies staging and keeps unconfigured owner sign-in locked", async ({ page, request }) => {
+  test.skip(!process.env.SCOS_E2E_LOCKED, "Requires the isolated locked staging frontend");
+  const config = await request.get("/api/v1/auth/config");
+  expect(config.status()).toBe(200);
+  expect(await config.json()).toMatchObject({
+    environment: "staging",
+    local_login_allowed: false,
+    oidc_configured: false,
+    publishing_disabled: true,
+    paid_calls_disabled: true,
+  });
+  expect((await request.get("/api/v1/workspace")).status()).toBe(401);
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Sign in with Google" })).toBeDisabled();
+  await expect(page.getByText("Owner sign-in is locked until", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Enter local owner workspace" })).toHaveCount(0);
+  await page.setViewportSize({ width: 375, height: 812 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+  await page.screenshot({ path: process.env.SCOS_LOCK_SCREENSHOT || "artifacts/staging-locked.png", fullPage: true });
+});
