@@ -1,0 +1,164 @@
+# SCREEN CENTRAL OS greenfield defaults. Machine-readable initial policy; none of these enables paid or live operations.
+schema_version: 1
+project:
+  name: Screen Central OS
+  repository: qwazi12/screen-central-os
+  local_checkout: ~/dev/screen-central-os
+  old_project_forbidden: qwazi12/scrapper
+  app_namespace: scos
+  owner_only: true
+  timezone: America/New_York
+  production_publish_default: false
+environments:
+  local: {provider_mode: mock, external_paid_calls: false, live_publish_allowed: false, resource_namespace: scos-local}
+  ci: {provider_mode: mock, external_paid_calls: false, live_publish_allowed: false, resource_namespace: scos-ci}
+  staging: {provider_mode: mock, external_paid_calls: false, live_publish_allowed: false, resource_namespace: scos-staging}
+  production: {provider_mode: gated, external_paid_calls: false, live_publish_allowed: false, resource_namespace: scos-prod}
+security:
+  owner_oidc_allowlist_required: true
+  session_cookie_name: __Host-scos_session
+  session_max_age_hours: 12
+  signed_object_url_seconds: 300
+  csrf_required_for_mutation: true
+  oauth_pkce_and_state: true
+  media_upload_default_max_bytes: 1073741824
+  private_bucket_only: true
+  raw_third_party_youtube_downloads: false
+feature_flags:
+  DISCOVERY_LIVE_READ: false
+  MODEL_PAID_CALLS: false
+  PROVIDER_YOUTUBE_PUBLISH: false
+  PROVIDER_INSTAGRAM_PUBLISH: false
+  PROVIDER_FACEBOOK_PUBLISH: false
+  DRIVE_ARCHIVE_ENABLED: false
+  AUTOMATED_RENDER: false
+  AUTOMATED_RESEARCH: false
+  AUTOMATED_PUBLISH: false
+  AI_COMMENT_DRAFTS: false
+  COMMENT_REPLY_ENABLED: false
+  THIRD_PARTY_MEDIA_INGEST: false
+budget:
+  local_usd_per_day: 0
+  staging_usd_per_day: 0
+  production_usd_per_day_initial: 0
+  production_usd_per_month_initial: 0
+  require_db_reservation_before_paid_call: true
+  unknown_provider_pricing_action: block
+  max_retry_for_model_schema_failure: 2
+  max_retry_for_external_publish_unknown: 0
+workers:
+  cpu_worker_instances: 1
+  media_worker_instances: 1
+  max_active_media_jobs: 1
+  lease_seconds: 60
+  heartbeat_seconds: 15
+  max_cpu_job_attempts: 3
+  max_media_job_attempts: 2
+  backoff_initial_seconds: 5
+  max_backoff_seconds: 900
+  outbox_batch: 50
+  outbox_inbox_dedupe_required: true
+research:
+  provider_timeout_seconds: 30
+  max_retrieved_text_bytes: 2000000
+  time_sensitive_claim_max_age_hours: 24
+  movie_metadata_max_age_days: 7
+  evergreen_background_max_age_days: 90
+  require_exact_evidence_locator: true
+  trusted_domain_without_statement_supports_claim: false
+  llm_verdict_is_independent_evidence: false
+  missing_verdict_policy: blocked
+  contradictions_policy: blocked_pending_review
+  ambiguous_entity_policy: blocked_pending_review
+  opinion_requires_label: true
+  source_prompt_injection_policy: treat_as_data
+media:
+  video_h264_profile: high
+  video_pixel_format: yuv420p
+  audio_codec: aac
+  audio_sample_rate: 48000
+  narration_loudness_target_lufs: -16
+  narration_loudness_tolerance_lu: 2
+  true_peak_max_db_tp: -1
+  unusual_silence_warning_ms: 600
+  recommended_preview_resolution: [540, 960]
+  preserve_approved_exports: true
+  allowed_untested_rights_kinds: []
+profiles:
+  long_16_9:
+    width: 1920
+    height: 1080
+    fps: 30
+    video_codec: h264
+    audio_codec: aac
+    thumbnail: {width: 1280, height: 720, required: true}
+    duration_limit: provider_verified
+  short_9_16:
+    width: 1080
+    height: 1920
+    fps: 30
+    video_codec: h264
+    audio_codec: aac
+    duration_limit: provider_verified
+  reel_9_16:
+    width: 1080
+    height: 1920
+    fps: 30
+    video_codec: h264
+    audio_codec: aac
+    duration_limit: provider_verified
+  carousel_4_5:
+    width: 1080
+    height: 1350
+    minimum_slides: 3
+    maximum_slides_internal: 10
+    slides_allowed_by_provider: provider_verified
+  image_1_1: {width: 1080, height: 1080, format: png}
+  story_9_16: {width: 1080, height: 1920, format: png, publishing: manual_until_supported}
+  text_post: {publishing: manual_until_supported}
+strategic_scoring:
+  use_as_probability: false
+  block_if_facts_or_rights_fail: true
+  weights:
+    channel_audience_fit: 0.25
+    observed_or_estimated_demand: 0.20
+    originality_and_payoff: 0.20
+    competitive_opportunity: 0.15
+    timeliness: 0.10
+    production_feasibility: 0.10
+  require_observed_estimated_labels: true
+  insufficient_data_label: unknown
+  exploration_share_initial: 0.30
+analytics:
+  windows_hours: [24, 48, 168, 672]
+  minimum_comparison_require_same_format: true
+  require_mature_window: true
+  allow_cross_platform_summing_different_view_definitions: false
+  missing_value: null
+  unavailable_metrics_policy: explicit_unknown
+  short_sample_policy: inconclusive
+publishing:
+  default_account_enabled: false
+  global_kill_switch_enabled: true
+  require_exact_export_hash: true
+  require_owner_package_approval: true
+  per_export_account_unique_unresolved: true
+  retry_unknown_without_reconciliation: false
+  unknown_resolution: hold_for_reconciliation
+  default_upload_privacy: private
+  no_drive_import_auto_enqueue: true
+  no_automatic_public_comment_replies: true
+storage:
+  object_store_role: working_storage
+  drive_role: approved_export_archive
+  quarantine_untrusted_uploads: true
+  verify_sha256_before_use: true
+  tmp_delete_after_verified_hours: 24
+  failed_qa_retention_days: 30
+  raw_comment_retention_days_max: 90
+  approved_media_retention: owner_controlled
+recovery:
+  initial_rpo_hours_target: 24
+  initial_rto_hours_target: 4
+  restore_drill_interval_days: 30
+  retain_publication_intent_history: true
