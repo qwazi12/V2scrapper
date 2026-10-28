@@ -13,3 +13,7 @@ artifacts/
 playwright-report/
 test-results/
 *.tsbuildinfo
+
+.vercel/
+.railway/
+.auth/

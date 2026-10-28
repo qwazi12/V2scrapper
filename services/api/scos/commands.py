@@ -5,6 +5,7 @@ from psycopg.types.json import Jsonb
 from .db import one, all_rows, insert, sha, now, audit, event
 from .policy import require, claim_errors, research_ready, variant_ready, export_ready, PolicyError
 from .seed import create_fixture
+from .config import ENV, NAMESPACE
 
 
 def invalidate(c, opportunity_id, actor):
@@ -98,6 +99,7 @@ def command(c, action, target, p, actor):
         )
         return {"status": "selected", "asset_id": str(asset["id"])}
     if action == "fixture":
+        require(ENV != "production", "FORBIDDEN", "Synthetic fixtures are disabled in production", 403)
         return create_fixture(c, actor)
     if action == "opportunity.create":
         require(
@@ -709,7 +711,7 @@ def command(c, action, target, p, actor):
             confidence_note="Inconclusive until mature comparable observations are available",
         )
     if action == "budget.reserve":
-        policy = one(c, "SELECT * FROM budget_policies WHERE policy_key=%s FOR UPDATE", ("scos-local-daily",))
+        policy = one(c, "SELECT * FROM budget_policies WHERE policy_key=%s FOR UPDATE", (NAMESPACE + "-daily",))
         amount = Decimal(str(p.get("amount", 0)))
         require(amount.is_finite() and amount > 0, "INVALID_INPUT", "Positive finite amount required", 422)
         require(

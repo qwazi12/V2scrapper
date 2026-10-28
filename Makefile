@@ -35,3 +35,9 @@ backup:
 	PYTHONPATH=services/api uv run python scripts/backup.py
 restore-drill:
 	PYTHONPATH=services/api uv run python scripts/backup.py --restore-drill
+
+.PHONY: test-e2e audit-blueprint
+test-e2e:
+	npm --prefix apps/web run test:e2e
+audit-blueprint:
+	uv run python scripts/audit_blueprint.py

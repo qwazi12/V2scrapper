@@ -1,15 +1,16 @@
 from datetime import timedelta
 from .db import one, insert, sha, now, audit
-from .config import OWNER_ID, RUNTIME
+from .config import OWNER_ID, RUNTIME, HOSTED, NAMESPACE
 from . import storage
 
 
 def bootstrap(c):
-    c.execute(
-        """INSERT INTO app_users(id,email,display_name,auth_subject) VALUES(%s,'owner@scos.local','Screen Central','scos-local-owner')
+    if not HOSTED:
+        c.execute(
+            """INSERT INTO app_users(id,email,display_name,auth_subject) VALUES(%s,'owner@scos.local','Screen Central','scos-local-owner')
         ON CONFLICT(id) DO NOTHING""",
-        (OWNER_ID,),
-    )
+            (OWNER_ID,),
+        )
     for platform in ("youtube", "instagram", "facebook"):
         c.execute(
             """INSERT INTO social_accounts(platform,external_account_id,display_name,handle,capability_snapshot)
@@ -23,7 +24,8 @@ def bootstrap(c):
             ),
         )
     c.execute(
-        "INSERT INTO budget_policies(policy_key,period,limit_amount) VALUES('scos-local-daily','daily',0) ON CONFLICT DO NOTHING"
+        "INSERT INTO budget_policies(policy_key,period,limit_amount) VALUES(%s,'daily',0) ON CONFLICT DO NOTHING",
+        (NAMESPACE + "-daily",),
     )
 
 

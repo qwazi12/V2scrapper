@@ -1,6 +1,8 @@
+> Staging readiness branch: the original local release has now been pushed and verified on `qwazi12/V2scrapper` and preserved as `local-working-175c5a5`. See [staging setup and current gates](docs/architecture/STAGING.md) and the [full blueprint audit](docs/architecture/BLUEPRINT_AUDIT.md). The historical local-release notes below describe the preserved baseline; they do not mean production is complete.
+
 # Screen Central OS
 
-Independent greenfield application; **not Scrapper**. Built locally in `~/dev/screen-central-os`. The owner-supplied empty `qwazi12/V2scrapper` Git remote is retained; no source was fetched from another project and nothing has been pushed or deployed.
+Independent greenfield application; **not Scrapper**. Built locally in `~/dev/screen-central-os`. The owner-supplied `qwazi12/V2scrapper` Git remote is used. The local release is pushed and tagged; staging work is isolated on this branch. No source was copied from another project.
 
 ## Run on this Mac
 

@@ -128,20 +128,39 @@ def render(work: Path, variant, campaign, script, assets=None):
         ]
         duration = None
     else:
-        # macOS voice is local synthesis. Linux falls back to an explicitly labeled test tone.
-        seconds = 5
-        audios = []
-        narration = True
-        for i, s in enumerate(sentences):
-            voice = work / f"voice-{i}.aiff"
-            import shutil
+        # Both engines synthesize locally; hosted Linux never silently substitutes a tone for narration.
+        import shutil
 
-            if shutil.which("say"):
-                run(["say", "-r", "190", "-o", str(voice), s])
-                audio_input = ["-i", str(voice)]
+        voice_sources = []
+        narration = True
+        engine = "macOS say" if shutil.which("say") else "espeak-ng" if shutil.which("espeak-ng") else "test tone"
+        for i, sentence in enumerate(sentences):
+            if engine == "macOS say":
+                voice = work / f"voice-{i}.aiff"
+                run(["say", "-r", "190", "-o", str(voice), sentence])
+            elif engine == "espeak-ng":
+                voice = work / f"voice-{i}.wav"
+                run(["espeak-ng", "-s", "190", "-w", str(voice), "--", sentence])
             else:
                 narration = False
-                audio_input = ["-f", "lavfi", "-i", "sine=frequency=220:sample_rate=48000:duration=5"]
+                voice = work / f"tone-{i}.wav"
+                run(
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-v",
+                        "error",
+                        "-f",
+                        "lavfi",
+                        "-i",
+                        "sine=frequency=220:sample_rate=48000:duration=5",
+                        str(voice),
+                    ]
+                )
+            voice_sources.append(voice)
+        seconds = max(5, math.ceil(max(float(probe(p)["format"]["duration"]) for p in voice_sources)) + 1)
+        audios = []
+        for i, voice in enumerate(voice_sources):
             wav = work / f"audio-{i}.wav"
             run(
                 [
@@ -149,7 +168,8 @@ def render(work: Path, variant, campaign, script, assets=None):
                     "-y",
                     "-v",
                     "error",
-                    *audio_input,
+                    "-i",
+                    str(voice),
                     "-af",
                     "apad,loudnorm=I=-16:TP=-1:LRA=11",
                     "-t",
@@ -248,7 +268,7 @@ def render(work: Path, variant, campaign, script, assets=None):
             {
                 "probe": meta,
                 "audio_report": loud_json,
-                "narration": "local macOS voice" if narration else "synthetic test tone; no narration",
+                "narration": engine if narration else "synthetic test tone; no narration",
                 "caption_segments": [
                     {"start_ms": i * seconds * 1000, "end_ms": (i + 1) * seconds * 1000, "text": s}
                     for i, s in enumerate(sentences)

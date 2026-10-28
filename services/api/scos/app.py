@@ -4,15 +4,15 @@ import json
 import re
 import secrets
 from contextlib import asynccontextmanager
-from datetime import timedelta
 from typing import Any
 from uuid import UUID
 from fastapi import FastAPI, Request, Response, Depends, Query, UploadFile, File
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, RedirectResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ConfigDict, Field
 from psycopg import errors as pg_errors
 from .config import ENV, OWNER_ID, ORIGINS, validate
+from . import config, identity
 from .db import connect, one, all_rows, clean, now, uid, audit
 from .policy import PolicyError, require, claim_errors
 from .commands import execute
@@ -48,7 +48,7 @@ def origin(request):
 
 
 def owner(request: Request, c=Depends(db)):
-    token = request.cookies.get("scos_session", "")
+    token = request.cookies.get(config.SESSION_COOKIE, "")
     session = one(
         c,
         """SELECT s.*,u.display_name,u.email FROM sessions s JOIN app_users u ON u.id=s.user_id
@@ -113,7 +113,12 @@ def ready(c=Depends(db)):
     return {
         "status": "ok",
         "environment": ENV,
-        "details": {"database": "postgresql", "storage": "private S3 emulator", "live_publish": False},
+        "details": {
+            "database": "postgresql",
+            "storage": "durable private S3" if config.HOSTED else "private S3 emulator",
+            "auth_configured": config.auth_configured() if config.HOSTED else True,
+            "live_publish": False,
+        },
     }
 
 
@@ -121,26 +126,13 @@ def ready(c=Depends(db)):
 def login(request: Request, response: Response, c=Depends(db)):
     origin(request)
     require(ENV == "local", "FORBIDDEN", "Local identity is disabled outside local development", 403)
-    token = secrets.token_urlsafe(32)
-    csrf = hashlib.sha256(("csrf:" + token).encode()).hexdigest()
-    from .db import insert
-
-    insert(
-        c,
-        "sessions",
-        user_id=OWNER_ID,
-        token_hash=hash_token(token),
-        csrf_hash=hash_token(csrf),
-        expires_at=now() + timedelta(hours=12),
-    )
-    response.set_cookie("scos_session", token, httponly=True, samesite="strict", secure=False, path="/", max_age=43200)
-    audit(c, "session.created", OWNER_ID, OWNER_ID, details={"mode": "local_fixture"})
+    csrf = identity.issue_session(c, response, OWNER_ID, "local_fixture")
     return {"csrf_token": csrf, "user": {"display_name": "Screen Central", "role": "owner"}, "environment": ENV}
 
 
 @app.get("/api/v1/auth/session")
 def session(request: Request, s=Depends(owner)):
-    csrf = hashlib.sha256(("csrf:" + request.cookies["scos_session"]).encode()).hexdigest()
+    csrf = hashlib.sha256(("csrf:" + request.cookies[config.SESSION_COOKIE]).encode()).hexdigest()
     return {
         "csrf_token": csrf,
         "user": {"id": str(s["user_id"]), "display_name": s["display_name"], "role": "owner"},
@@ -151,7 +143,9 @@ def session(request: Request, s=Depends(owner)):
 @app.post("/api/v1/auth/logout")
 def logout(response: Response, s=Depends(owner), c=Depends(db)):
     c.execute("UPDATE sessions SET revoked_at=now() WHERE id=%s", (s["id"],))
-    response.delete_cookie("scos_session")
+    response.delete_cookie(
+        config.SESSION_COOKIE, secure=config.HOSTED, httponly=True, samesite="lax" if config.HOSTED else "strict"
+    )
     return {"ok": True}
 
 
@@ -432,3 +426,38 @@ def upload_asset(request: Request, file: UploadFile = File(...), s=Depends(owner
     )
     audit(c, "asset.uploaded", row["id"], str(s["user_id"]), details={"byte_size": size, "rights_state": "pending"})
     return clean(row)
+
+
+@app.get("/api/v1/auth/config")
+def auth_config():
+    return {
+        "environment": ENV,
+        "local_login_allowed": ENV == "local",
+        "oidc_configured": config.auth_configured(),
+        "publishing_disabled": True,
+        "paid_calls_disabled": True,
+    }
+
+
+@app.get("/api/v1/auth/oidc/start")
+def oidc_start(response: Response, c=Depends(db)):
+    return identity.start_login(c, response)
+
+
+@app.get("/api/v1/auth/oidc/callback")
+def oidc_callback(request: Request, code: str = "", state: str = ""):
+    require(config.auth_configured(), "AUTH_NOT_CONFIGURED", "Owner sign-in is not configured", 503)
+    require(
+        code and state and len(code) <= 4096 and len(state) <= 256,
+        "AUTH_STATE_INVALID",
+        "Google sign-in was cancelled or invalid",
+        403,
+    )
+    login_state = identity.consume_state(state, request.cookies.get(identity.LOGIN_COOKIE, ""))
+    claims = identity.exchange_code(code, login_state)
+    response = RedirectResponse(config.PUBLIC_URL + "/", status_code=303)
+    response.delete_cookie(identity.LOGIN_COOKIE, secure=True, httponly=True, samesite="lax")
+    with connect() as c:
+        user = identity.owner_from_identity(c, claims)
+        identity.issue_session(c, response, user["id"])
+    return response

@@ -1,0 +1,12 @@
+.git
+.venv
+.runtime
+**/node_modules
+**/.next
+**/.next-dev
+**/__pycache__
+**/.pytest_cache
+.env*
+artifacts
+outputs
+work

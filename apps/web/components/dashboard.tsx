@@ -147,6 +147,11 @@ export default function Dashboard() {
   const routeId = path[1];
   const router = useRouter();
   const [data, setData] = useState<Workspace | null>(null),
+    [authMode, setAuthMode] = useState<{
+      environment: string;
+      local_login_allowed: boolean;
+      oidc_configured: boolean;
+    } | null>(null),
     [csrf, setCsrf] = useState(""),
     [signed, setSigned] = useState(false),
     [boot, setBoot] = useState(true),
@@ -183,7 +188,11 @@ export default function Dashboard() {
     let active = true;
     (async () => {
       try {
-        const r = await fetch("/api/v1/auth/session");
+        const [r, auth] = await Promise.all([
+          fetch("/api/v1/auth/session"),
+          fetch("/api/v1/auth/config"),
+        ]);
+        if (auth.ok && active) setAuthMode(await auth.json());
         if (r.ok) {
           const s = await r.json();
           if (active) {
@@ -195,7 +204,7 @@ export default function Dashboard() {
       } catch {
         if (active)
           setError(
-            "The local API is unavailable. Start the app services and retry.",
+            "The API is unavailable. Please retry when the service is healthy.",
           );
       } finally {
         if (active) setBoot(false);
@@ -260,6 +269,13 @@ export default function Dashboard() {
     setBusy(true);
     setError("");
     try {
+      if (!authMode?.local_login_allowed) {
+        const r = await fetch("/api/v1/auth/oidc/start");
+        const result = await r.json();
+        if (!r.ok) throw Error(result.message);
+        window.location.assign(result.authorization_url);
+        return;
+      }
       const r = await fetch("/api/v1/auth/local", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -378,7 +394,9 @@ export default function Dashboard() {
           <div className="login-safety">
             <ShieldCheck size={18} />
             <span>
-              Local development · no external credentials
+              {authMode?.environment === "local"
+                ? "Local development · no external credentials"
+                : "Private workspace · owner Google sign-in"}
               <br />
               <small>Publishing and paid providers are disabled.</small>
             </span>
@@ -388,16 +406,29 @@ export default function Dashboard() {
               {error}
             </p>
           )}
-          <Button onClick={login} disabled={busy}>
+          <Button
+            onClick={login}
+            disabled={
+              busy ||
+              !authMode ||
+              (!authMode.local_login_allowed && !authMode.oidc_configured)
+            }
+          >
             {busy ? (
               <Loader2 className="spin" size={18} />
             ) : (
               <ArrowRight size={18} />
             )}
-            Enter local owner workspace
+            {authMode?.local_login_allowed
+              ? "Enter local owner workspace"
+              : "Sign in with Google"}
           </Button>
           <small className="fineprint">
-            Development identity only. Production sign-in is not configured.
+            {authMode?.local_login_allowed
+              ? "Development identity only. Hosted sign-in uses a separate Google OAuth client."
+              : authMode?.oidc_configured
+                ? "Only the configured owner account can enter."
+                : "Owner sign-in is locked until a new Google OAuth client and owner allowlist are configured."}
           </small>
         </div>
         <div className="login-orbit" aria-hidden="true">
@@ -486,7 +517,10 @@ export default function Dashboard() {
         <div className="sidebar-bottom">
           <div className="safe-card">
             <span className="live-dot" />
-            LOCAL SAFE MODE
+            {d.environment === "local"
+              ? "LOCAL"
+              : d.environment.toUpperCase()}{" "}
+            SAFE MODE
             <p>
               No live publishing.
               <br />
@@ -521,7 +555,9 @@ export default function Dashboard() {
           <div className="topbar-right">
             <span className="tiny-status">
               <span className="live-dot" />
-              LOCAL DEVELOPMENT
+              {d.environment === "local"
+                ? "LOCAL DEVELOPMENT"
+                : d.environment.toUpperCase()}
             </span>
             <button
               className="icon-button"
@@ -2397,8 +2433,13 @@ export default function Dashboard() {
             </div>
             <div className="system-items">
               {[
-                ["Environment", "Local development"],
-                ["Database", "PostgreSQL · scos_local"],
+                [
+                  "Environment",
+                  d.environment === "local"
+                    ? "Local development"
+                    : d.environment,
+                ],
+                ["Database", "PostgreSQL · isolated SCOS database"],
                 ["Object storage", "Private local S3 emulator"],
                 [
                   "Media worker",
@@ -2408,7 +2449,12 @@ export default function Dashboard() {
                 ],
                 ["Live publishing", "Disabled · no live adapter"],
                 ["Paid providers", "Disabled · $0 budget"],
-                ["Authentication", "Local fixture · production OIDC pending"],
+                [
+                  "Authentication",
+                  d.environment === "local"
+                    ? "Local development fixture"
+                    : "Owner-only Google OIDC",
+                ],
               ].map(([k, v]) => (
                 <div key={k}>
                   <span>{k}</span>
