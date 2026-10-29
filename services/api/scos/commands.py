@@ -40,6 +40,21 @@ def revoke_variant(c, variant_id, actor):
 
 
 def command(c, action, target, p, actor):
+    if action == "asset.revoke_rights":
+        asset = one(c, "SELECT * FROM media_assets WHERE id=%s FOR UPDATE", (target,))
+        require(asset, "NOT_FOUND", "Asset not found", 404)
+        require(len(p.get("review_note", "").strip()) >= 15, "INVALID_INPUT", "Explain the rights restriction", 422)
+        rights = all_rows(c, "SELECT * FROM asset_rights WHERE asset_id=%s", (target,))
+        audit(c, "asset.rights_revoked", target, actor, reason=p["review_note"], details={"previous_rights": rights})
+        c.execute("UPDATE asset_rights SET reviewed_at=NULL WHERE asset_id=%s", (target,))
+        c.execute("UPDATE media_assets SET status='restricted' WHERE id=%s", (target,))
+        for variant in all_rows(c, "SELECT DISTINCT variant_id FROM asset_usage WHERE asset_id=%s", (target,)):
+            c.execute(
+                "UPDATE scripts SET review_status='revoked' WHERE variant_id=%s AND review_status='owner_approved'",
+                (variant["variant_id"],),
+            )
+            revoke_variant(c, variant["variant_id"], actor)
+        return {"status": "restricted"}
     if action == "asset.review_rights":
         asset = one(c, "SELECT * FROM media_assets WHERE id=%s FOR UPDATE", (target,))
         require(asset, "NOT_FOUND", "Asset not found", 404)
@@ -178,6 +193,91 @@ def command(c, action, target, p, actor):
             excerpt=text,
         )
         return {"source": source, "claim": claim}
+    if action == "claim.edit":
+        claim = one(c, "SELECT * FROM claims WHERE id=%s FOR UPDATE", (target,))
+        require(claim, "NOT_FOUND", "Claim not found", 404)
+        require(
+            p.get("expected_revision") == claim["revision"], "CONFLICT_REVISION", "Claim changed; reload before editing"
+        )
+        text = p.get("text", "").strip()
+        require(
+            1 <= len(text) <= 250 and len(p.get("review_note", "").strip()) >= 15,
+            "INVALID_INPUT",
+            "Provide an atomic claim and a specific correction note",
+            422,
+        )
+        audit(c, "claim.revised", target, actor, reason=p["review_note"], details={"before": claim, "new_text": text})
+        invalidate(c, claim["opportunity_id"], actor)
+        c.execute("UPDATE claim_evidence SET reviewed_at=NULL,reviewer_user_id=NULL WHERE claim_id=%s", (target,))
+        return one(
+            c,
+            "UPDATE claims SET text=%s,status='evidence_pending',revision=revision+1,factual_value='{}'::jsonb,last_adjudicated_at=NULL WHERE id=%s RETURNING *",
+            (text, target),
+        )
+    if action == "source.invalidate":
+        source = one(c, "SELECT * FROM source_records WHERE id=%s FOR UPDATE", (target,))
+        require(source, "NOT_FOUND", "Source not found", 404)
+        require(p.get("expected_hash") == source["content_sha256"], "CONFLICT_REVISION", "Source changed; reload")
+        require(
+            len(p.get("review_note", "").strip()) >= 15,
+            "INVALID_INPUT",
+            "Explain why this evidence is no longer usable",
+            422,
+        )
+        c.execute("UPDATE source_records SET fetch_status='invalidated' WHERE id=%s", (target,))
+        claims = all_rows(
+            c,
+            "SELECT DISTINCT cl.id,cl.opportunity_id FROM claims cl JOIN claim_evidence e ON e.claim_id=cl.id WHERE e.source_id=%s",
+            (target,),
+        )
+        for claim in claims:
+            invalidate(c, claim["opportunity_id"], actor)
+            c.execute(
+                "UPDATE claims SET status='uncertain',revision=revision+1,last_adjudicated_at=NULL WHERE id=%s",
+                (claim["id"],),
+            )
+        c.execute("UPDATE claim_evidence SET reviewed_at=NULL,reviewer_user_id=NULL WHERE source_id=%s", (target,))
+        return {"status": "invalidated", "claims_affected": len(claims)}
+    if action == "evidence.adjudicate":
+        evidence = one(c, "SELECT * FROM claim_evidence WHERE id=%s FOR UPDATE", (target,))
+        require(evidence, "NOT_FOUND", "Evidence not found", 404)
+        claim = one(c, "SELECT * FROM claims WHERE id=%s FOR UPDATE", (evidence["claim_id"],))
+        require(
+            p.get("expected_revision") == claim["revision"],
+            "CONFLICT_REVISION",
+            "Claim changed; reload before adjudication",
+        )
+        require(
+            p.get("stance") in ("supports", "contradicts", "mentions", "unknown")
+            and len(p.get("review_note", "").strip()) >= 15,
+            "INVALID_INPUT",
+            "Choose an evidence verdict and explain the passage",
+            422,
+        )
+        source = one(c, "SELECT * FROM source_records WHERE id=%s", (evidence["source_id"],))
+        require(
+            source["fetch_status"] == "ok" and evidence["excerpt"] and evidence["excerpt"] in (source["snippet"] or ""),
+            "CLAIM_UNVERIFIED",
+            "The exact passage must exist in a usable source",
+        )
+        audit(
+            c,
+            "evidence.adjudicated",
+            target,
+            actor,
+            reason=p["review_note"],
+            details={"previous_stance": evidence["stance"], "new_stance": p["stance"]},
+        )
+        invalidate(c, claim["opportunity_id"], actor)
+        c.execute(
+            "UPDATE claims SET status='evidence_pending',revision=revision+1,last_adjudicated_at=NULL WHERE id=%s",
+            (claim["id"],),
+        )
+        return one(
+            c,
+            "UPDATE claim_evidence SET stance=%s,notes=%s,reviewed_at=now(),reviewer_user_id=%s WHERE id=%s RETURNING *",
+            (p["stance"], p["review_note"], actor, target),
+        )
     if action == "claim.review":
         claim = one(c, "SELECT * FROM claims WHERE id=%s FOR UPDATE", (target,))
         require(claim, "NOT_FOUND", "Claim not found", 404)
@@ -360,7 +460,7 @@ def command(c, action, target, p, actor):
                 )
         event(c, "campaign.created", campaign["id"], research_package_id=str(pack["id"]))
         return campaign
-    if action in ("script.save", "script.approve"):
+    if action in ("script.save", "script.approve", "script.restore"):
         variant = one(c, "SELECT * FROM campaign_variants WHERE id=%s FOR UPDATE", (target,))
         require(variant, "NOT_FOUND", "Variant not found", 404)
         script = one(c, "SELECT * FROM scripts WHERE variant_id=%s ORDER BY revision DESC LIMIT 1", (target,))
@@ -369,8 +469,20 @@ def command(c, action, target, p, actor):
             "CONFLICT_REVISION",
             "Script changed; reload the latest revision",
         )
-        if action == "script.save":
-            sentences = p.get("sentences", [])
+        if action in ("script.save", "script.restore"):
+            if action == "script.restore":
+                previous = one(
+                    c, "SELECT * FROM scripts WHERE variant_id=%s AND revision=%s", (target, p.get("source_revision"))
+                )
+                require(
+                    previous and previous["revision"] < script["revision"],
+                    "INVALID_INPUT",
+                    "Choose an earlier revision of this variant",
+                    422,
+                )
+                sentences = previous["sentences"]
+            else:
+                sentences = p.get("sentences", [])
             require(
                 1 <= len(sentences) <= 6,
                 "INVALID_INPUT",

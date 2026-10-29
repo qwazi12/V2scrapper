@@ -57,14 +57,14 @@
       "requirement": "Human adjudication with audit and version invalidation",
       "priority": "P0; approval invalidated on any claim edit",
       "status": "partially_implemented_or_verified",
-      "evidence_and_gap": "Claim review and script/image changes invalidate dependent approvals; not every source/license mutation path exists."
+      "evidence_and_gap": "Claim corrections, explicit evidence verdicts, source invalidation, rights revocation and script/image changes revoke dependent research/export approvals. Immutable source text and audit history retained; full structured-source refresh integration remains incomplete."
     },
     {
       "id": "FR-009",
       "requirement": "Versioned editorial briefs, scripts, hook alternatives",
       "priority": "P1; inspect diffs, undo",
       "status": "partially_implemented_or_verified",
-      "evidence_and_gap": "Versioned scripts and independent format treatments; full brief/script diff and undo missing."
+      "evidence_and_gap": "Versioned scripts, sentence diffs and restoration as a new unapproved revision implemented; independent format treatments exist. Versioned editorial brief/hook workflows remain incomplete."
     },
     {
       "id": "FR-010",
@@ -297,7 +297,7 @@
       "scenario": "Human-approved claim revised after script approval",
       "expected": "Script approval invalid, dependent export flagged",
       "status": "focused_or_partial_coverage",
-      "evidence_and_gap": "test_script_revision_revokes_approvals (script path; claim edit paths partial)"
+      "evidence_and_gap": "test_claim_correction_revokes_research_scripts_and_exports; source/rights invalidation tests; real browser correction and version restoration flow"
     },
     {
       "id": "AT-013",

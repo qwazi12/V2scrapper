@@ -1,4 +1,5 @@
 import asyncio
+from difflib import SequenceMatcher
 import hashlib
 import json
 import os
@@ -209,7 +210,8 @@ def workspace(s=Depends(owner), c=Depends(db)):
     result["evidence"] = clean(
         all_rows(
             c,
-            """SELECT e.*,s.uri,s.title AS source_title,s.snippet,s.retrieved_at,s.expires_at FROM claim_evidence e
+            """SELECT e.*,s.uri,s.title AS source_title,s.snippet,s.retrieved_at,s.expires_at,
+            s.content_sha256 AS source_content_hash,s.fetch_status AS source_status FROM claim_evidence e
         JOIN source_records s ON e.source_id=s.id""",
         )
     )
@@ -228,6 +230,29 @@ def workspace(s=Depends(owner), c=Depends(db)):
     result["ai_drafts"] = clean(all_rows(c, "SELECT * FROM ai_draft_calls ORDER BY created_at DESC LIMIT 100"))
     result["claim_blockers"] = {str(cl["id"]): claim_errors(c, cl["id"]) for cl in all_rows(c, "SELECT * FROM claims")}
     return result
+
+
+@app.get("/api/v1/variants/{id}/scripts/history")
+def script_history(id: UUID, s=Depends(owner), c=Depends(db)):
+    require(one(c, "SELECT id FROM campaign_variants WHERE id=%s", (id,)), "NOT_FOUND", "Variant not found", 404)
+    versions = clean(
+        all_rows(
+            c,
+            "SELECT revision,text,sentences,text_sha256,review_status,created_at FROM scripts WHERE variant_id=%s ORDER BY revision DESC LIMIT 50",
+            (id,),
+        )
+    )
+    for index, version in enumerate(versions):
+        version["changes"] = []
+        if index + 1 < len(versions):
+            old = [s["text"] for s in versions[index + 1]["sentences"]]
+            new = [s["text"] for s in version["sentences"]]
+            for tag, a, b, x, y in SequenceMatcher(a=old, b=new).get_opcodes():
+                if tag in ("delete", "replace"):
+                    version["changes"] += [{"kind": "removed", "text": text} for text in old[a:b]]
+                if tag in ("insert", "replace"):
+                    version["changes"] += [{"kind": "added", "text": text} for text in new[x:y]]
+    return {"items": versions}
 
 
 def list_endpoint(table):

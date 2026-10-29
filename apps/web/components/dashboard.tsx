@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { GeminiDraft } from "./gemini-draft";
+import { ScriptHistory } from "./script-history";
 import {
   Aperture,
   ArrowDownToLine,
@@ -1060,6 +1061,91 @@ export default function Dashboard() {
                                 : "Not yet reviewed"}
                             </p>
                             <span className="source-url">{e.uri}</span>
+                            <details>
+                              <summary>
+                                Adjudicate or invalidate this evidence
+                              </summary>
+                              <form
+                                className="form-grid"
+                                onSubmit={(event) => {
+                                  event.preventDefault();
+                                  const f = new FormData(event.currentTarget);
+                                  act(
+                                    "evidence.adjudicate",
+                                    e.id,
+                                    {
+                                      expected_revision: c.revision,
+                                      stance: f.get("stance"),
+                                      review_note: f.get("note"),
+                                    },
+                                    "Evidence verdict saved. Review the claim again before approving research.",
+                                  );
+                                }}
+                              >
+                                <label>
+                                  What does the exact passage show?
+                                  <select name="stance" defaultValue={e.stance}>
+                                    <option value="supports">
+                                      Supports this claim
+                                    </option>
+                                    <option value="contradicts">
+                                      Contradicts this claim
+                                    </option>
+                                    <option value="mentions">
+                                      Mentions the topic only
+                                    </option>
+                                    <option value="unknown">
+                                      Support is unknown
+                                    </option>
+                                  </select>
+                                </label>
+                                <label>
+                                  Evidence review note
+                                  <textarea
+                                    name="note"
+                                    required
+                                    minLength={15}
+                                  />
+                                </label>
+                                <button
+                                  className="button secondary"
+                                  disabled={busy || e.source_status !== "ok"}
+                                >
+                                  Save verdict and revoke earlier approvals
+                                </button>
+                              </form>
+                              <form
+                                className="form-grid"
+                                onSubmit={(event) => {
+                                  event.preventDefault();
+                                  const f = new FormData(event.currentTarget);
+                                  act(
+                                    "source.invalidate",
+                                    e.source_id,
+                                    {
+                                      expected_hash: e.source_content_hash,
+                                      review_note: f.get("reason"),
+                                    },
+                                    "Source invalidated. All dependent research and export approvals were revoked.",
+                                  );
+                                }}
+                              >
+                                <label>
+                                  Why is the source unusable?
+                                  <textarea
+                                    name="reason"
+                                    required
+                                    minLength={15}
+                                  />
+                                </label>
+                                <button
+                                  className="button secondary"
+                                  disabled={busy || e.source_status !== "ok"}
+                                >
+                                  Invalidate source and revoke approvals
+                                </button>
+                              </form>
+                            </details>
                           </div>
                         ))}
                       {d.claim_blockers?.[c.id]?.map((b: string) => (
@@ -1100,6 +1186,43 @@ export default function Dashboard() {
                         <Check size={16} />
                         Review exact evidence
                       </Button>
+                      <details>
+                        <summary>Correct this atomic claim</summary>
+                        <form
+                          className="form-grid"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            const f = new FormData(event.currentTarget);
+                            act(
+                              "claim.edit",
+                              c.id,
+                              {
+                                expected_revision: c.revision,
+                                text: f.get("text"),
+                                review_note: f.get("note"),
+                              },
+                              "Claim revised. Evidence and identity need a fresh review; dependent approvals were revoked.",
+                            );
+                          }}
+                        >
+                          <label>
+                            Corrected claim
+                            <textarea
+                              name="text"
+                              defaultValue={c.text}
+                              required
+                              maxLength={250}
+                            />
+                          </label>
+                          <label>
+                            Correction reason
+                            <textarea name="note" required minLength={15} />
+                          </label>
+                          <button className="button secondary" disabled={busy}>
+                            Save correction for review
+                          </button>
+                        </form>
+                      </details>
                     </article>
                   ))}
                 </div>
@@ -1359,6 +1482,22 @@ export default function Dashboard() {
                         )}
                         refresh={load}
                       />
+                      <ScriptHistory
+                        key={v.id + ":" + s.revision}
+                        variantId={v.id}
+                        revision={s.revision}
+                        restore={async (sourceRevision) => {
+                          await act(
+                            "script.restore",
+                            v.id,
+                            {
+                              expected_revision: s.revision,
+                              source_revision: sourceRevision,
+                            },
+                            "Earlier wording restored as a new draft. Reapprove before rendering.",
+                          );
+                        }}
+                      />
                       <div className="variant-footer">
                         <code>SHA-256 {shortHash(s.text_sha256)}</code>
                         <div className="inline-actions">
@@ -1477,6 +1616,38 @@ export default function Dashboard() {
                             </dl>
                           ))}
                         <code>SHA-256 {shortHash(a.sha256)}</code>
+                        {a.status === "approved" && (
+                          <details>
+                            <summary>Restrict this asset’s rights</summary>
+                            <form
+                              onSubmit={(event) => {
+                                event.preventDefault();
+                                const f = new FormData(event.currentTarget);
+                                act(
+                                  "asset.revoke_rights",
+                                  a.id,
+                                  { review_note: f.get("reason") },
+                                  "Asset restricted. Dependent scripts and export approvals were revoked.",
+                                );
+                              }}
+                            >
+                              <label>
+                                Why is this asset no longer eligible?
+                                <textarea
+                                  name="reason"
+                                  required
+                                  minLength={15}
+                                />
+                              </label>
+                              <button
+                                className="button secondary"
+                                disabled={busy}
+                              >
+                                Restrict asset and revoke approvals
+                              </button>
+                            </form>
+                          </details>
+                        )}
                         {a.status === "quarantine" && (
                           <form
                             onSubmit={(e) => {

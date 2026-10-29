@@ -47,7 +47,11 @@ def claim_errors(c, claim_id):
         matching = [
             e
             for e in supporting
-            if e["structured_field"] and e["metadata"].get(e["structured_field"]) == value.get("expected")
+            if e["structured_field"]
+            and value.get("expected") is not None
+            and e["structured_field"] in e["metadata"]
+            and type(e["metadata"][e["structured_field"]]) is type(value["expected"])
+            and e["metadata"][e["structured_field"]] == value["expected"]
         ]
         if not matching:
             errors.append("Structured field does not match this claim")
@@ -107,12 +111,18 @@ def variant_ready(c, variant_id):
     assets = all_rows(
         c,
         """SELECT a.*, r.id AS rights_id,r.rights_kind,r.valid_to,r.platforms,r.permitted_uses,
-        r.derivatives_allowed,r.reviewed_at,r.proof_object_key FROM asset_usage u JOIN media_assets a ON a.id=u.asset_id
-        JOIN asset_rights r ON r.id=u.rights_id WHERE u.variant_id=%s""",
+        r.derivatives_allowed,r.reviewed_at,r.proof_object_key,r.valid_from,r.monetization_allowed,r.territory,r.attribution
+        FROM asset_usage u JOIN media_assets a ON a.id=u.asset_id
+        JOIN asset_rights r ON r.id=u.rights_id WHERE u.variant_id=%s ORDER BY a.id,r.id""",
         (variant_id,),
     )
     require(assets, "ASSET_UNLICENSED", "Select at least one approved original asset")
     for a in assets:
+        require(
+            not a["valid_from"] or a["valid_from"] <= datetime.now(timezone.utc),
+            "ASSET_UNLICENSED",
+            "Asset license is not active yet",
+        )
         require(
             a["status"] == "approved"
             and a["rights_kind"] in ("owner_created", "licensed", "provider_permitted")
@@ -143,6 +153,15 @@ def variant_ready(c, variant_id):
                     "rights": str(a["rights_id"]),
                     "expires": a["valid_to"],
                     "platforms": a["platforms"],
+                    "valid_from": a["valid_from"],
+                    "kind": a["rights_kind"],
+                    "permitted_uses": a["permitted_uses"],
+                    "derivatives_allowed": a["derivatives_allowed"],
+                    "monetization_allowed": a["monetization_allowed"],
+                    "territory": a["territory"],
+                    "attribution": a["attribution"],
+                    "proof": a["proof_object_key"],
+                    "reviewed_at": a["reviewed_at"],
                 }
                 for a in assets
             ],

@@ -13,8 +13,8 @@ Baseline: `175c5a5`. Every FR-001..030, AT-001..060 and NFR target is inventorie
 | FR-005 | partially_implemented_or_verified | Manual source metadata, excerpts, timestamps and content hashes; no live snapshot acquisition. |
 | FR-006 | partially_implemented_or_verified | Atomic claim ledger, exact reviewed support and contradiction blockers tested locally. |
 | FR-007 | partially_implemented_or_verified | Structured-field mismatch tests exist; no live canonical cast/date/credit resolver or full Dune corpus. |
-| FR-008 | partially_implemented_or_verified | Claim review and script/image changes invalidate dependent approvals; not every source/license mutation path exists. |
-| FR-009 | partially_implemented_or_verified | Versioned scripts and independent format treatments; full brief/script diff and undo missing. |
+| FR-008 | partially_implemented_or_verified | Claim corrections, explicit evidence verdicts, source invalidation, rights revocation and script/image changes revoke dependent research/export approvals. Immutable source text and audit history retained; full structured-source refresh integration remains incomplete. |
+| FR-009 | partially_implemented_or_verified | Versioned scripts, sentence diffs and restoration as a new unapproved revision implemented; independent format treatments exist. Versioned editorial brief/hook workflows remain incomplete. |
 | FR-010 | partially_implemented_or_verified | Owned-image upload, decoding/quarantine, owner attestation and use-specific rights gates; licensed video ingest missing. |
 | FR-011 | not_implemented | No scene/audio/transcript search index. |
 | FR-012 | partially_implemented_or_verified | Real synthetic 1080p landscape rendering; rich long-form footage/chapters not implemented. |
@@ -52,7 +52,7 @@ Baseline: `175c5a5`. Every FR-001..030, AT-001..060 and NFR target is inventorie
 | AT-009 | not_yet_release_verified | No complete automated acceptance case; remains a release blocker where applicable. |
 | AT-010 | focused_or_partial_coverage | test_trusted_hostname_does_not_prove_claim |
 | AT-011 | focused_or_partial_coverage | test_missing_citation_blocks_script; test_correct_citation_cannot_authorize_different_sentence |
-| AT-012 | focused_or_partial_coverage | test_script_revision_revokes_approvals (script path; claim edit paths partial) |
+| AT-012 | focused_or_partial_coverage | test_claim_correction_revokes_research_scripts_and_exports; source/rights invalidation tests; real browser correction and version restoration flow |
 | AT-013 | focused_or_partial_coverage | test_contradiction_blocks_supported_claim |
 | AT-014 | focused_or_partial_coverage | test_stale_source_blocks_render |
 | AT-015 | not_yet_release_verified | No complete automated acceptance case; remains a release blocker where applicable. |

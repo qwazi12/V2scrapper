@@ -7,7 +7,9 @@ test("original research → three real media formats → exact approval → unkn
   const localLogin = page.getByRole("button", {
     name: "Enter local owner workspace",
   });
-  await expect(localLogin.or(page.getByRole("heading", {name:"Control Room."}))).toBeVisible();
+  await expect(
+    localLogin.or(page.getByRole("heading", { name: "Control Room." })),
+  ).toBeVisible();
   if (await localLogin.isVisible()) await localLogin.click();
   await expect(
     page.getByRole("heading", { name: "Control Room." }),
@@ -45,7 +47,9 @@ test("original research → three real media formats → exact approval → unkn
   const campaignURL = page.url();
   const gemini = page.locator("section.variant-editor").first();
   await gemini.getByText("Draft with Gemini", { exact: true }).click();
-  await expect(gemini.getByRole("button", { name: "Estimate draft cost" })).toBeDisabled();
+  await expect(
+    gemini.getByRole("button", { name: "Estimate draft cost" }),
+  ).toBeDisabled();
   await expect(gemini).toContainText("Paid calls are disabled");
   for (const format of ["Landscape · 16:9", "Short · 9:16", "Carousel · 4:5"]) {
     const editor = page
@@ -154,6 +158,82 @@ test("original research → three real media formats → exact approval → unkn
     path: "artifacts/e2e-reconciled.png",
     fullPage: true,
   });
+  await page.goto(campaignURL);
+  const shortEditor = page
+    .locator("section.variant-editor")
+    .filter({ hasText: "Short · 9:16" });
+  await shortEditor
+    .getByText("Edit this script · revision 1", { exact: true })
+    .click();
+  await shortEditor
+    .getByRole("button", { name: "Save new revision", exact: true })
+    .click();
+  await expect(
+    page.getByText(
+      "New script revision saved. Earlier export approvals were revoked.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await shortEditor
+    .getByText("Compare earlier script revisions", { exact: true })
+    .click();
+  await shortEditor
+    .getByRole("button", {
+      name: "Restore revision 1 as new draft",
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByText(
+      "Earlier wording restored as a new draft. Reapprove before rendering.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(
+    shortEditor.getByText("Edit this script · revision 3", { exact: true }),
+  ).toBeVisible();
+  const afterRestore = await (
+    await page.request.get("/api/v1/workspace")
+  ).json();
+  expect(
+    afterRestore.exports.find((e: { id: string }) => e.id === ex).status,
+  ).toBe("revoked");
+  await page.goto(
+    "/research/" +
+      afterRestore.campaigns.find((c: { id: string }) =>
+        campaignURL.endsWith(c.id),
+      ).opportunity_id,
+  );
+  const claim = page
+    .locator("article.claim-card")
+    .filter({ hasText: "Mara keeps the last lighthouse lit." });
+  await claim.getByText("Correct this atomic claim", { exact: true }).click();
+  await claim
+    .getByRole("textbox", { name: "Corrected claim", exact: true })
+    .fill("Mara keeps the last signal lit.");
+  await claim
+    .getByRole("textbox", { name: "Correction reason", exact: true })
+    .fill(
+      "Synthetic correction test: the revised statement needs a new exact source passage.",
+    );
+  await claim
+    .getByRole("button", { name: "Save correction for review", exact: true })
+    .click();
+  await expect(
+    page.getByText(
+      "Claim revised. Evidence and identity need a fresh review; dependent approvals were revoked.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(
+    page
+      .locator("article.claim-card")
+      .filter({ hasText: "Mara keeps the last signal lit." }),
+  ).toContainText("evidence pending");
+  await page.screenshot({
+    path: "artifacts/e2e-correction.png",
+    fullPage: true,
+  });
 });
 
 test("mobile layout and keyboard dialog", async ({ page }) => {
@@ -162,7 +242,9 @@ test("mobile layout and keyboard dialog", async ({ page }) => {
   const localLogin = page.getByRole("button", {
     name: "Enter local owner workspace",
   });
-  await expect(localLogin.or(page.getByRole("heading", {name:"Control Room."}))).toBeVisible();
+  await expect(
+    localLogin.or(page.getByRole("heading", { name: "Control Room." })),
+  ).toBeVisible();
   if (await localLogin.isVisible()) await localLogin.click();
   await expect(
     page.getByRole("heading", { name: "Control Room." }),

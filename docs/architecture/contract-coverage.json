@@ -103,6 +103,7 @@
     "/api/v1/auth/supabase/callback",
     "/api/v1/variants/{id}/ai/draft",
     "/api/v1/variants/{id}/ai/quote",
+    "/api/v1/variants/{id}/scripts/history",
     "/api/v1/workspace"
   ],
   "full_blueprint_conformance": false,
