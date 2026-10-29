@@ -197,7 +197,7 @@
       "requirement": "Owner data export, backup restore, observability and disaster recovery",
       "priority": "P0; restore drill passes",
       "status": "partially_implemented_or_verified",
-      "evidence_and_gap": "Local backup/isolated restore verified; hosted PITR/retention/monitoring and disaster recovery not release-verified."
+      "evidence_and_gap": "Local restore and encrypted Supabase private-schema/media restore verified in a new offline PostgreSQL container; 48 table checksums and 3 media objects matched. Hosted Auth recovery, offsite schedule/retention, load RPO/RTO and regional failover remain unverified."
     },
     {
       "id": "FR-029",
@@ -556,7 +556,7 @@
       "scenario": "Backup restore on staging",
       "expected": "Exact hashes, DB relationships and job receipts consistent",
       "status": "focused_or_partial_coverage",
-      "evidence_and_gap": "scripts/backup.py --restore-drill verified local backup, not hosted DR"
+      "evidence_and_gap": "scripts/backup.py local restore; scripts/backup_hosted.py live staging backup + isolated offline schema/media restore, including a second restore with source access explicitly blocked. Not a full regional failover."
     },
     {
       "id": "AT-050",

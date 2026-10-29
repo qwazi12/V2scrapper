@@ -33,7 +33,7 @@ Baseline: `175c5a5`. Every FR-001..030, AT-001..060 and NFR target is inventorie
 | FR-025 | partially_implemented_or_verified | Synthetic provenance/null metrics and experiment registration; mature cohort diagnostics and real evidence-based recommendations absent. |
 | FR-026 | partially_implemented_or_verified | Gemini REST drafting, strict output validation, durable call intents, UTC daily/monthly budget reservations and usage settlement implemented with fault/concurrency tests. Current dated pricing is pinned; no real paid call until the owner's key and spending caps are configured. |
 | FR-027 | partially_implemented_or_verified | Durable leases/fencing, active FFmpeg cancellation, isolated lease temporary files, bounded transient retries, dead letters and explicit safe retries tested. Full provider/process-kill fault matrix remains incomplete. |
-| FR-028 | partially_implemented_or_verified | Local backup/isolated restore verified; hosted PITR/retention/monitoring and disaster recovery not release-verified. |
+| FR-028 | partially_implemented_or_verified | Local restore and encrypted Supabase private-schema/media restore verified in a new offline PostgreSQL container; 48 table checksums and 3 media objects matched. Hosted Auth recovery, offsite schedule/retention, load RPO/RTO and regional failover remain unverified. |
 | FR-029 | partially_implemented_or_verified | Committed browser/media E2E now present; full AT-001..060 release suite and hosted owner workflow not yet verified. |
 | FR-030 | partially_implemented_or_verified | Original fixture rights, attestation and audit records; production license/policy inventory and commercial review outstanding. |
 
@@ -89,7 +89,7 @@ Baseline: `175c5a5`. Every FR-001..030, AT-001..060 and NFR target is inventorie
 | AT-046 | focused_or_partial_coverage | UI is explicitly inconclusive; full experimental-analysis test absent |
 | AT-047 | not_yet_release_verified | No complete automated acceptance case; remains a release blocker where applicable. |
 | AT-048 | not_yet_release_verified | No complete automated acceptance case; remains a release blocker where applicable. |
-| AT-049 | focused_or_partial_coverage | scripts/backup.py --restore-drill verified local backup, not hosted DR |
+| AT-049 | focused_or_partial_coverage | scripts/backup.py local restore; scripts/backup_hosted.py live staging backup + isolated offline schema/media restore, including a second restore with source access explicitly blocked. Not a full regional failover. |
 | AT-050 | not_yet_release_verified | No complete automated acceptance case; remains a release blocker where applicable. |
 | AT-051 | not_yet_release_verified | No complete automated acceptance case; remains a release blocker where applicable. |
 | AT-052 | not_yet_release_verified | No complete automated acceptance case; remains a release blocker where applicable. |

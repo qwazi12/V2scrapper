@@ -33,7 +33,7 @@ fr_notes = {
     25: "Synthetic provenance/null metrics and experiment registration; mature cohort diagnostics and real evidence-based recommendations absent.",
     26: "Gemini REST drafting, strict output validation, durable call intents, UTC daily/monthly budget reservations and usage settlement implemented with fault/concurrency tests. Current dated pricing is pinned; no real paid call until the owner's key and spending caps are configured.",
     27: "Durable leases/fencing, active FFmpeg cancellation, isolated lease temporary files, bounded transient retries, dead letters and explicit safe retries tested. Full provider/process-kill fault matrix remains incomplete.",
-    28: "Local backup/isolated restore verified; hosted PITR/retention/monitoring and disaster recovery not release-verified.",
+    28: "Local restore and encrypted Supabase private-schema/media restore verified in a new offline PostgreSQL container; 48 table checksums and 3 media objects matched. Hosted Auth recovery, offsite schedule/retention, load RPO/RTO and regional failover remain unverified.",
     29: "Committed browser/media E2E now present; full AT-001..060 release suite and hosted owner workflow not yet verified.",
     30: "Original fixture rights, attestation and audit records; production license/policy inventory and commercial review outstanding.",
 }
@@ -72,7 +72,7 @@ focused = {
     43: "Separate platform panels; no automated cross-definition test",
     45: "test_unknown_metrics_remain_null",
     46: "UI is explicitly inconclusive; full experimental-analysis test absent",
-    49: "scripts/backup.py --restore-drill verified local backup, not hosted DR",
+    49: "scripts/backup.py local restore; scripts/backup_hosted.py live staging backup + isolated offline schema/media restore, including a second restore with source access explicitly blocked. Not a full regional failover.",
     54: "test_duplicate_events_have_one_inbox_receipt",
     55: "test_stale_worker_is_fenced",
     56: "test_platform_rights_are_checked",
