@@ -19,7 +19,12 @@ def main():
     with connect() as c:
         revision = one(c, "SELECT version_num FROM alembic_version")["version_num"]
         database = one(c, "SELECT current_database() AS name")["name"]
-    if revision != "scos_0003" or database != "scos_staging":
+    expected_database = "postgres" if config.DATA_PROVIDER == "supabase" else "scos_staging"
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    head = ScriptDirectory.from_config(Config(str(config.ROOT / "alembic.ini"))).get_current_head()
+    if revision != head or database != expected_database:
         raise RuntimeError("Staging migrations have not reached the expected revision")
     storage.init()
     output, checks = render(

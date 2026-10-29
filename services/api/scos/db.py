@@ -7,11 +7,19 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from psycopg import sql
-from .config import DATABASE_URL
+from .config import DATABASE_URL, DATABASE_SCHEMA, database_connect_args
 
 
 def connect():
-    return psycopg.connect(DATABASE_URL, row_factory=dict_row)
+    c = psycopg.connect(DATABASE_URL, row_factory=dict_row, **database_connect_args())
+    if DATABASE_SCHEMA != "public":
+        # Supavisor may ignore startup options. Set and verify the schema on the actual connection.
+        c.execute(sql.SQL("SET search_path TO {}, public").format(sql.Identifier(DATABASE_SCHEMA)))
+        if c.execute("SELECT current_schema() AS name").fetchone()["name"] != DATABASE_SCHEMA:
+            c.close()
+            raise RuntimeError("SCOS_RESOURCE_ISOLATION: the private database schema is missing")
+        c.commit()
+    return c
 
 
 def encode(x):

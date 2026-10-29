@@ -2440,7 +2440,14 @@ export default function Dashboard() {
                     : d.environment,
                 ],
                 ["Database", "PostgreSQL · isolated SCOS database"],
-                ["Object storage", "Private local S3 emulator"],
+                [
+                  "Object storage",
+                  d.environment === "local"
+                    ? "Private local S3 emulator"
+                    : d.data_provider === "supabase"
+                      ? "Private Supabase Storage"
+                      : "Private S3 storage",
+                ],
                 [
                   "Media worker",
                   pending.length
@@ -2448,7 +2455,12 @@ export default function Dashboard() {
                     : "Idle · polling durable queue",
                 ],
                 ["Live publishing", "Disabled · no live adapter"],
-                ["Paid providers", "Disabled · $0 budget"],
+                [
+                  "AI provider",
+                  d.ai_provider === "gemini"
+                    ? "Gemini · paid calls disabled"
+                    : "Local fixtures · $0 external calls",
+                ],
                 [
                   "Authentication",
                   d.environment === "local"

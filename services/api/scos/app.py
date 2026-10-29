@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import json
+import os
 import re
 import secrets
 from contextlib import asynccontextmanager
@@ -115,7 +116,8 @@ def ready(c=Depends(db)):
         "environment": ENV,
         "details": {
             "database": "postgresql",
-            "storage": "durable private S3" if config.HOSTED else "private S3 emulator",
+            "storage": "private Supabase Storage" if config.DATA_PROVIDER == "supabase" else "durable private S3" if config.HOSTED else "private S3 emulator",
+            "data_provider": config.DATA_PROVIDER,
             "auth_configured": config.auth_configured() if config.HOSTED else True,
             "live_publish": False,
         },
@@ -214,6 +216,8 @@ def workspace(s=Depends(owner), c=Depends(db)):
     result["environment"] = ENV
     result["publishing_disabled"] = True
     result["paid_calls_disabled"] = True
+    result["data_provider"] = config.DATA_PROVIDER
+    result["ai_provider"] = os.getenv("SCOS_AI_PROVIDER", "fixture")
     result["claim_blockers"] = {str(cl["id"]): claim_errors(c, cl["id"]) for cl in all_rows(c, "SELECT * FROM claims")}
     return result
 
@@ -446,6 +450,7 @@ def oidc_start(response: Response, c=Depends(db)):
 
 @app.get("/api/v1/auth/oidc/callback")
 def oidc_callback(request: Request, code: str = "", state: str = ""):
+    require(config.DATA_PROVIDER != "supabase", "FORBIDDEN", "Use the configured owner sign-in provider", 403)
     require(config.auth_configured(), "AUTH_NOT_CONFIGURED", "Owner sign-in is not configured", 503)
     require(
         code and state and len(code) <= 4096 and len(state) <= 256,
@@ -460,4 +465,23 @@ def oidc_callback(request: Request, code: str = "", state: str = ""):
     with connect() as c:
         user = identity.owner_from_identity(c, claims)
         identity.issue_session(c, response, user["id"])
+    return response
+
+
+@app.get("/api/v1/auth/supabase/callback")
+def supabase_callback(request: Request, code: str = ""):
+    from . import supabase_auth
+
+    require(config.DATA_PROVIDER == "supabase" and config.auth_configured(), "AUTH_NOT_CONFIGURED", "Owner sign-in is not configured", 503)
+    cookie = request.cookies.get(supabase_auth.LOGIN_COOKIE, "")
+    require(code and len(code) <= 4096 and len(cookie) <= 256 and cookie.count(".") == 1,
+            "AUTH_STATE_INVALID", "Google sign-in was cancelled, expired or opened in a different browser", 403)
+    state, browser = cookie.split(".")
+    login_state = identity.consume_state(state, browser)
+    claims = supabase_auth.exchange_code(code, login_state)
+    response = RedirectResponse(config.PUBLIC_URL + "/", status_code=303)
+    response.delete_cookie(supabase_auth.LOGIN_COOKIE, secure=True, httponly=True, samesite="lax")
+    with connect() as c:
+        user = identity.owner_from_identity(c, claims, issuer=config.SUPABASE_URL + "/auth/v1")
+        identity.issue_session(c, response, user["id"], lifetime_seconds=3600)
     return response

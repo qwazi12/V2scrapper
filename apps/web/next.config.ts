@@ -22,6 +22,34 @@ if (
 const config: NextConfig = {
   output: "standalone",
   distDir: process.env.NODE_ENV === "development" ? ".next-dev" : ".next",
+  async redirects() {
+    const canonical = process.env.SCOS_CANONICAL_URL;
+    if (!canonical) return [];
+    const target = new URL(canonical);
+    if (
+      target.protocol !== "https:" ||
+      target.username ||
+      target.password ||
+      target.pathname !== "/" ||
+      target.search ||
+      target.hash
+    ) {
+      throw new Error("SCOS_CANONICAL_URL must be an HTTPS origin");
+    }
+    return [
+      {
+        source: "/:path*",
+        missing: [
+          {
+            type: "host" as const,
+            value: target.hostname.replace(/\./g, "\\."),
+          },
+        ],
+        destination: target.origin + "/:path*",
+        permanent: false,
+      },
+    ];
+  },
   async rewrites() {
     return [
       {

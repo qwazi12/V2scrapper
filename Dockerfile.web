@@ -4,7 +4,8 @@ COPY apps/web/package.json apps/web/package-lock.json ./
 RUN npm ci --no-fund --no-audit
 COPY apps/web/ ./
 ARG SCOS_API_URL
-ENV SCOS_API_URL=$SCOS_API_URL SCOS_ENV=staging NEXT_TELEMETRY_DISABLED=1
+ARG SCOS_CANONICAL_URL
+ENV SCOS_API_URL=$SCOS_API_URL SCOS_CANONICAL_URL=$SCOS_CANONICAL_URL SCOS_ENV=staging NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 FROM node:24-bookworm-slim@sha256:be8204d4bd327363357f532187b752ff62759c31bedf98e9e18fc08c9cbd605c AS runtime

@@ -6,9 +6,14 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 from .config import BUCKET, RUNTIME, S3_ENDPOINT, HOSTED
 from .db import sha
+from . import config
 
 
 def client():
+    if config.DATA_PROVIDER == "supabase":
+        from .supabase_storage import SupabaseStorage
+
+        return SupabaseStorage()
     return boto3.client(
         "s3",
         endpoint_url=S3_ENDPOINT,

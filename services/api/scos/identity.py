@@ -25,7 +25,7 @@ def pkce_challenge(verifier):
     return base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
 
 
-def issue_session(c, response, user_id, environment=None):
+def issue_session(c, response, user_id, environment=None, lifetime_seconds=43200):
     token = secrets.token_urlsafe(32)
     csrf = hashlib.sha256(("csrf:" + token).encode()).hexdigest()
     insert(
@@ -34,7 +34,7 @@ def issue_session(c, response, user_id, environment=None):
         user_id=user_id,
         token_hash=token_hash(token),
         csrf_hash=token_hash(csrf),
-        expires_at=now() + timedelta(hours=12),
+        expires_at=now() + timedelta(seconds=lifetime_seconds),
     )
     response.set_cookie(
         config.SESSION_COOKIE,
@@ -43,13 +43,17 @@ def issue_session(c, response, user_id, environment=None):
         samesite="lax" if config.HOSTED else "strict",
         secure=config.HOSTED,
         path="/",
-        max_age=43200,
+        max_age=lifetime_seconds,
     )
     audit(c, "session.created", user_id, str(user_id), details={"environment": environment or config.ENV})
     return csrf
 
 
 def start_login(c, response):
+    if config.DATA_PROVIDER == "supabase":
+        from .supabase_auth import start_login as start_supabase_login
+
+        return start_supabase_login(c, response)
     require(
         config.auth_configured(),
         "AUTH_NOT_CONFIGURED",
@@ -191,8 +195,8 @@ def exchange_code(code, state):
         raise PolicyError("AUTH_PROVIDER_UNAVAILABLE", "Google sign-in is temporarily unavailable", 503)
 
 
-def owner_from_identity(c, claims):
-    subject = config.OIDC_ISSUER + "|" + claims["sub"]
+def owner_from_identity(c, claims, issuer=None):
+    subject = (issuer or config.OIDC_ISSUER) + "|" + claims["sub"]
     c.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("scos:owner-identity",))
     existing = one(c, "SELECT * FROM app_users WHERE id=%s FOR UPDATE", (config.OWNER_ID,))
     if existing:
