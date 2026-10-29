@@ -1571,7 +1571,8 @@ export default function Dashboard() {
                       <Badge value={j.status} />
                       {j.output?.export_id &&
                         link("/review/" + j.output.export_id, "Inspect export")}
-                      {j.status === "queued" && (
+                      {(["queued", "retry_wait"].includes(j.status) ||
+                        (j.kind === "render" && j.status === "running")) && (
                         <button
                           className="quiet-button"
                           onClick={() => act("job.cancel", j.id)}
@@ -1580,6 +1581,25 @@ export default function Dashboard() {
                           Cancel
                         </button>
                       )}
+                      {j.kind === "render" &&
+                        ["failed", "dead_letter", "cancelled"].includes(
+                          j.status,
+                        ) && (
+                          <button
+                            className="quiet-button"
+                            disabled={busy}
+                            onClick={() =>
+                              act(
+                                "job.retry",
+                                j.id,
+                                { expected_lease_epoch: j.lease_epoch },
+                                "Safe render retry queued using the same approved inputs.",
+                              )
+                            }
+                          >
+                            Retry render
+                          </button>
+                        )}
                     </div>
                   ))}
                 </div>

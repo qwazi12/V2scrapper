@@ -4,6 +4,11 @@ import json
 import math
 import subprocess
 import textwrap
+import os
+import signal
+import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from . import storage
@@ -18,10 +23,59 @@ PROFILES = {
 }
 FONT = "/System/Library/Fonts/Supplemental/Arial.ttf"
 BOLD = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+_CONTROL = ContextVar("render_control", default=None)
+
+
+def checkpoint():
+    check = _CONTROL.get()
+    if check:
+        check()
+
+
+@contextmanager
+def render_control(check):
+    token = _CONTROL.set(check)
+    try:
+        checkpoint()
+        yield
+    finally:
+        _CONTROL.reset(token)
 
 
 def run(args, timeout=180):
-    return subprocess.run(args, check=True, capture_output=True, timeout=timeout)
+    checkpoint()
+    started = time.monotonic()
+    with subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True) as process:
+        try:
+            while True:
+                checkpoint()
+                if time.monotonic() - started >= timeout:
+                    raise subprocess.TimeoutExpired(args, timeout)
+                try:
+                    stdout, stderr = process.communicate(timeout=min(0.25, timeout))
+                    break
+                except subprocess.TimeoutExpired:
+                    continue
+            checkpoint()
+            if process.returncode:
+                raise subprocess.CalledProcessError(process.returncode, args, stdout, stderr)
+            return subprocess.CompletedProcess(args, process.returncode, stdout, stderr)
+        except BaseException:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGTERM)
+                try:
+                    process.communicate(timeout=2)
+                except subprocess.TimeoutExpired:
+                    os.killpg(process.pid, signal.SIGKILL)
+                    process.communicate()
+            raise
+
+
+def store(path):
+    checkpoint()
+    result = storage.put(path)
+    checkpoint()
+    return result
 
 
 def font(size, bold=False):
@@ -93,6 +147,7 @@ def probe(path):
 
 
 def render(work: Path, variant, campaign, script, assets=None):
+    checkpoint()
     work.mkdir(parents=True, exist_ok=True)
     size = PROFILES[variant["format"]]
     sentences = [s["text"] for s in script["sentences"]][:6]
@@ -106,16 +161,17 @@ def render(work: Path, variant, campaign, script, assets=None):
             break
     paths = []
     for i, s in enumerate(sentences):
+        checkpoint()
         p = work / f"slide-{i + 1}.png"
         card(p, size, campaign["title"], s, i, background=background, fictional=variant["config"].get("fixture", True))
         paths.append(p)
-    poster_key, _, _ = storage.put(paths[0])
+    poster_key, _, _ = store(paths[0])
     info = {"poster_key": poster_key, "renderer": "scos-ffmpeg-v1", "synthetic": True, "slides": []}
     if variant["format"] in ("carousel_4_5", "image_1_1", "story_9_16"):
         import zipfile
 
         for p in paths:
-            key, digest, _ = storage.put(p)
+            key, digest, _ = store(p)
             info["slides"].append({"key": key, "sha256": digest, "alt": sentences[len(info["slides"])]})
         output = work / "carousel.zip"
         with zipfile.ZipFile(output, "w") as z:
@@ -299,7 +355,7 @@ def render(work: Path, variant, campaign, script, assets=None):
         ]
         (work / "ffprobe.json").write_text(json.dumps(meta, indent=2))
         (work / "audio-report.json").write_text(json.dumps(loud_json, indent=2))
-    key, digest, byte_size = storage.put(output)
+    key, digest, byte_size = store(output)
     report = {"sha256": digest, "format": variant["format"], "checks": checks, "synthetic": True}
     (work / "qa.json").write_text(json.dumps(report, indent=2))
     return {

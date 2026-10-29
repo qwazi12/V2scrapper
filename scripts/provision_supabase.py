@@ -30,10 +30,14 @@ def main():
                 )
             c.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(sql.Identifier(role), sql.Literal(password)))
         c.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO {}").format(sql.Identifier(schema), sql.Identifier(role)))
-        for table in c.execute("SELECT tablename FROM pg_tables WHERE schemaname=%s", (schema,)).fetchall():
+        for table in c.execute(
+            "SELECT tablename,rowsecurity FROM pg_tables WHERE schemaname=%s ORDER BY tablename", (schema,)
+        ).fetchall():
             name = table["tablename"]
             target = sql.Identifier(schema, name)
-            c.execute(sql.SQL("ALTER TABLE {} ENABLE ROW LEVEL SECURITY").format(target))
+            # Avoid unnecessary AccessExclusive locks on live queue tables during additive releases.
+            if not table["rowsecurity"]:
+                c.execute(sql.SQL("ALTER TABLE {} ENABLE ROW LEVEL SECURITY").format(target))
             if name == "hosted_owner_policy":
                 c.execute(sql.SQL("REVOKE ALL ON {} FROM {}").format(target, sql.Identifier(role)))
                 continue

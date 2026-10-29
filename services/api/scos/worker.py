@@ -3,7 +3,10 @@
 import signal
 import threading
 import time
-from .db import connect, one, all_rows, insert, uid, event, audit
+import subprocess
+import httpx
+from botocore.exceptions import BotoCoreError
+from .db import connect, one, all_rows, insert, uid, event, audit, now
 from .policy import variant_ready, export_ready, require
 from .config import RUNTIME, validate
 from . import storage
@@ -26,9 +29,18 @@ def claim_job(c, owner):
                 "UPDATE jobs SET status='blocked',last_error_code='PUBLICATION_UNCONFIRMED' WHERE id=%s", (job["id"],)
             )
         else:
-            c.execute(
-                "UPDATE jobs SET status=CASE WHEN attempt_count>=max_attempts THEN 'dead_letter' ELSE 'retry_wait' END,lease_owner=NULL WHERE id=%s",
+            recovered = one(
+                c,
+                "UPDATE jobs SET status=CASE WHEN attempt_count>=max_attempts THEN 'dead_letter' ELSE 'retry_wait' END,lease_owner=NULL,lease_expires_at=NULL,last_error_code='WORKER_LOST' WHERE id=%s RETURNING status",
                 (job["id"],),
+            )
+            insert(
+                c,
+                "job_events",
+                job_id=job["id"],
+                stage="recovery",
+                event_type=recovered["status"],
+                message="Expired worker lease recovered; no partial export was approved.",
             )
     job = one(
         c,
@@ -52,25 +64,41 @@ def fenced(c, job):
         row
         and row["lease_epoch"] == job["lease_epoch"]
         and row["lease_owner"] == job["lease_owner"]
-        and row["status"] == "running",
+        and row["status"] == "running"
+        and row["lease_expires_at"] > now(),
         "WORKER_LEASE_LOST",
         "Stale worker cannot complete this job",
     )
 
 
-def heartbeat(job, done):
-    while not done.wait(10):
-        with connect() as c:
-            c.execute(
-                "UPDATE jobs SET heartbeat_at=now(),lease_expires_at=now()+interval '60 seconds' WHERE id=%s AND lease_epoch=%s AND lease_owner=%s AND status='running'",
-                (job["id"], job["lease_epoch"], job["lease_owner"]),
-            )
+def heartbeat(job, done, cancelled):
+    while not done.wait(1):
+        try:
+            with connect() as c:
+                active = c.execute(
+                    """UPDATE jobs SET heartbeat_at=now(),lease_expires_at=now()+interval '60 seconds'
+                    WHERE id=%s AND lease_epoch=%s AND lease_owner=%s AND status='running'
+                    AND lease_expires_at>now() RETURNING id""",
+                    (job["id"], job["lease_epoch"], job["lease_owner"]),
+                ).fetchone()
+                if not active:
+                    cancelled.set()
+                    return
+        except Exception:
+            # A worker that cannot establish ownership must stop producing output.
+            cancelled.set()
+            return
 
 
-def process_render(job):
-    from .media import render
+def process_render(job, cancelled=None):
+    from .media import render, render_control
+
+    def check_active():
+        require(not STOP, "WORKER_STOPPED", "Worker shutdown interrupted the render")
+        require(not cancelled or not cancelled.is_set(), "WORKER_LEASE_LOST", "Render lease was lost or cancelled")
 
     with connect() as c:
+        fenced(c, job)
         variant, campaign, script, assets, snapshot = variant_ready(c, job["aggregate_id"])
         require(snapshot == job["input_hash"], "EXPORT_APPROVAL_STALE", "Inputs changed after the job was requested")
         for asset in assets:
@@ -84,7 +112,10 @@ def process_render(job):
             progress=10,
             message="Rendering original synthetic frames and local audio",
         )
-    output, checks = render(RUNTIME / "renders" / str(job["id"]), variant, campaign, script, assets)
+    # A reclaimed job never shares temporary FFmpeg files with the stale lease.
+    work = RUNTIME / "renders" / str(job["id"]) / ("lease-" + str(job["lease_epoch"]))
+    with render_control(check_active):
+        output, checks = render(work, variant, campaign, script, assets)
     with connect() as c:
         fenced(c, job)
         _, _, _, _, current = variant_ready(c, job["aggregate_id"])
@@ -213,11 +244,12 @@ def tick(owner):
     if not job:
         return False
     done = threading.Event()
-    thread = threading.Thread(target=heartbeat, args=(job, done), daemon=True)
+    cancelled = threading.Event()
+    thread = threading.Thread(target=heartbeat, args=(job, done, cancelled), daemon=True)
     thread.start()
     try:
         if job["kind"] == "render":
-            process_render(job)
+            process_render(job, cancelled)
         elif job["kind"] == "mock_publish":
             process_publish(job)
         else:
@@ -226,19 +258,50 @@ def tick(owner):
         from .policy import PolicyError
 
         code = exc.code if isinstance(exc, PolicyError) else type(exc).__name__
-        message = exc.message if isinstance(exc, PolicyError) else str(exc)[:500]
+        message = (
+            exc.message
+            if isinstance(exc, PolicyError)
+            else "Render operation failed; inspect the isolated worker diagnostic."
+        )
         with connect() as c:
             # Preserve uncertainty for anything that may have reached a provider.
             row = one(c, "SELECT * FROM jobs WHERE id=%s FOR UPDATE", (job["id"],))
-            if row["lease_epoch"] == job["lease_epoch"] and row["status"] == "running":
+            if (
+                row["lease_epoch"] == job["lease_epoch"]
+                and row["status"] == "running"
+                and row["lease_owner"] == job["lease_owner"]
+                and row["lease_expires_at"] > now()
+            ):
                 if job["kind"] == "mock_publish":
                     c.execute(
                         "UPDATE publication_attempts SET state='unknown',error_code=%s WHERE id=%s AND state NOT IN ('confirmed','cancelled')",
                         (code, job["aggregate_id"]),
                     )
+                transient = (
+                    isinstance(exc, (OSError, TimeoutError, httpx.HTTPError, BotoCoreError, subprocess.TimeoutExpired))
+                    or code == "WORKER_STOPPED"
+                )
+                status = (
+                    "blocked"
+                    if job["kind"] == "mock_publish" or isinstance(exc, PolicyError) and not transient
+                    else "retry_wait"
+                    if transient and row["attempt_count"] < row["max_attempts"]
+                    else "dead_letter"
+                )
                 c.execute(
-                    "UPDATE jobs SET status='failed',last_error_code=%s,last_error_summary=%s,lease_expires_at=NULL WHERE id=%s",
-                    (code, message, job["id"]),
+                    """UPDATE jobs SET status=%s,last_error_code=%s,last_error_summary=%s,
+                    lease_expires_at=NULL,lease_owner=NULL,available_at=now()+%s*interval '1 second'
+                    WHERE id=%s""",
+                    (status, code, message, min(60, 2 ** row["attempt_count"]), job["id"]),
+                )
+                insert(
+                    c,
+                    "job_events",
+                    job_id=job["id"],
+                    stage="recovery",
+                    event_type=status,
+                    message=message,
+                    detail={"code": code},
                 )
                 audit(c, "job.failed", job["id"], details={"code": code, "message": message})
         print(f"Job {job['id']} failed: {code}: {message}", flush=True)

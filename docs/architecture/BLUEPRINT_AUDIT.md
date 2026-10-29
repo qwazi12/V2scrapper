@@ -32,7 +32,7 @@ Baseline: `175c5a5`. Every FR-001..030, AT-001..060 and NFR target is inventorie
 | FR-024 | partially_implemented_or_verified | Synthetic comments, exact-text review and individually deduplicated mock replies; live comment sync absent. |
 | FR-025 | partially_implemented_or_verified | Synthetic provenance/null metrics and experiment registration; mature cohort diagnostics and real evidence-based recommendations absent. |
 | FR-026 | partially_implemented_or_verified | Gemini REST drafting, strict output validation, durable call intents, UTC daily/monthly budget reservations and usage settlement implemented with fault/concurrency tests. Current dated pricing is pinned; no real paid call until the owner's key and spending caps are configured. |
-| FR-027 | partially_implemented_or_verified | Durable leases/fencing, queue cancellation and event inbox; full running-render stop, dead-letter and fault matrix incomplete. |
+| FR-027 | partially_implemented_or_verified | Durable leases/fencing, active FFmpeg cancellation, isolated lease temporary files, bounded transient retries, dead letters and explicit safe retries tested. Full provider/process-kill fault matrix remains incomplete. |
 | FR-028 | partially_implemented_or_verified | Local backup/isolated restore verified; hosted PITR/retention/monitoring and disaster recovery not release-verified. |
 | FR-029 | partially_implemented_or_verified | Committed browser/media E2E now present; full AT-001..060 release suite and hosted owner workflow not yet verified. |
 | FR-030 | partially_implemented_or_verified | Original fixture rights, attestation and audit records; production license/policy inventory and commercial review outstanding. |
@@ -67,8 +67,8 @@ Baseline: `175c5a5`. Every FR-001..030, AT-001..060 and NFR target is inventorie
 | AT-024 | focused_or_partial_coverage | Real audio stream/loudness checks; full silence/clip corpus absent |
 | AT-025 | not_yet_release_verified | No complete automated acceptance case; remains a release blocker where applicable. |
 | AT-026 | focused_or_partial_coverage | Real decode/hash/QA completion checks; incomplete-file fault case absent |
-| AT-027 | focused_or_partial_coverage | test_render_requests_deduplicate (sequential request case, not full concurrent render) |
-| AT-028 | not_yet_release_verified | No complete automated acceptance case; remains a release blocker where applicable. |
+| AT-027 | focused_or_partial_coverage | test_parallel_identical_renders_have_one_logical_job; sequential deduplication test |
+| AT-028 | focused_or_partial_coverage | test_owner_cancellation_stops_real_ffmpeg_and_fences_partial_output; stale/exhausted lease recovery tests. Literal SIGKILL/restart corpus remains incomplete. |
 | AT-029 | focused_or_partial_coverage | test_script_revision_revokes_approvals; test_exact_export_hash_required |
 | AT-030 | focused_or_partial_coverage | test_backup_path_not_available_as_export |
 | AT-031 | focused_or_partial_coverage | test_parallel_budget_reservations_cannot_overspend |

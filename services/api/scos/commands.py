@@ -406,6 +406,7 @@ def command(c, action, target, p, actor):
         return {"status": "owner_approved", "sha256": script["text_sha256"]}
     if action == "render":
         variant, campaign, script, assets, snapshot = variant_ready(c, target)
+        c.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("render:" + snapshot,))
         existing = one(
             c,
             "SELECT * FROM jobs WHERE kind='render' AND input_hash=%s AND status NOT IN ('failed','cancelled','dead_letter')",
@@ -429,11 +430,46 @@ def command(c, action, target, p, actor):
     if action == "job.cancel":
         job = one(c, "SELECT * FROM jobs WHERE id=%s FOR UPDATE", (target,))
         require(
-            job and job["status"] in ("queued", "retry_wait"),
+            job
+            and (job["status"] in ("queued", "retry_wait") or job["kind"] == "render" and job["status"] == "running"),
             "CONFLICT_REVISION",
-            "Only jobs that have not started can be cancelled",
+            "Cancel a queued job or an active render; an in-flight publication must be reconciled",
         )
-        return one(c, "UPDATE jobs SET status='cancelled' WHERE id=%s RETURNING *", (target,))
+        if job["kind"] == "mock_publish":
+            c.execute(
+                "UPDATE publication_attempts SET state='cancelled' WHERE id=%s AND state='scheduled'",
+                (job["aggregate_id"],),
+            )
+        insert(
+            c,
+            "job_events",
+            job_id=target,
+            stage="cancelled",
+            event_type="owner_cancelled",
+            message="Owner cancelled this job; its lease is revoked.",
+        )
+        return one(
+            c,
+            "UPDATE jobs SET status='cancelled',lease_epoch=lease_epoch+1,lease_owner=NULL,lease_expires_at=NULL WHERE id=%s RETURNING *",
+            (target,),
+        )
+    if action == "job.retry":
+        job = one(c, "SELECT * FROM jobs WHERE id=%s FOR UPDATE", (target,))
+        require(
+            job and job["kind"] == "render" and job["status"] in ("failed", "dead_letter", "cancelled"),
+            "CONFLICT_REVISION",
+            "Only a stopped render can be retried safely",
+        )
+        require(
+            p.get("expected_lease_epoch") == job["lease_epoch"], "CONFLICT_REVISION", "Job changed; reload before retry"
+        )
+        _, _, _, _, snapshot = variant_ready(c, job["aggregate_id"])
+        require(
+            snapshot == job["input_hash"],
+            "EXPORT_APPROVAL_STALE",
+            "Inputs changed; request a new render from the current script",
+        )
+        return command(c, "render", job["aggregate_id"], {}, actor)
     if action == "export.approve":
         ex = export_ready(c, target, False)
         require(p.get("expected_hash") == ex["sha256"], "EXPORT_APPROVAL_STALE", "The exact export hash is required")
