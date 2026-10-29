@@ -38,14 +38,14 @@ const config: NextConfig = {
     }
     return [
       {
-        source: "/:path*",
+        source: "/:path((?!healthz$).*)",
         missing: [
           {
             type: "host" as const,
             value: target.hostname.replace(/\./g, "\\."),
           },
         ],
-        destination: target.origin + "/:path*",
+        destination: target.origin + "/:path",
         permanent: false,
       },
     ];
