@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { GeminiDraft } from "./gemini-draft";
 import {
   Aperture,
   ArrowDownToLine,
@@ -1349,6 +1350,15 @@ export default function Dashboard() {
                           Save new revision
                         </Button>
                       </details>
+                      <GeminiDraft
+                        variantId={v.id}
+                        csrf={csrf}
+                        readiness={d.ai}
+                        drafts={(d.ai_drafts || []).filter(
+                          (draft: Row) => draft.variant_id === v.id,
+                        )}
+                        refresh={load}
+                      />
                       <div className="variant-footer">
                         <code>SHA-256 {shortHash(s.text_sha256)}</code>
                         <div className="inline-actions">

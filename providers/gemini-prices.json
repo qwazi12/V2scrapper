@@ -1,0 +1,15 @@
+{
+  "source": "https://ai.google.dev/gemini-api/docs/pricing",
+  "verified_on": "2026-10-29",
+  "prices": [{
+    "id": "gemini-3.8-flash-standard-2026-10-29",
+    "model": "gemini-3.8-flash",
+    "valid_from": "2026-10-29T00:00:00+00:00",
+    "valid_until": "2027-01-01T00:00:00+00:00",
+    "input_usd_per_million": "0.75",
+    "output_usd_per_million": "3.75",
+    "output_includes_thinking": true,
+    "tier": "standard",
+    "tools": false
+  }]
+}

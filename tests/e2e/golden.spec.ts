@@ -43,6 +43,10 @@ test("original research → three real media formats → exact approval → unkn
     page.getByRole("heading", { name: "Campaign Studio." }),
   ).toBeVisible();
   const campaignURL = page.url();
+  const gemini = page.locator("section.variant-editor").first();
+  await gemini.getByText("Draft with Gemini", { exact: true }).click();
+  await expect(gemini.getByRole("button", { name: "Estimate draft cost" })).toBeDisabled();
+  await expect(gemini).toContainText("Paid calls are disabled");
   for (const format of ["Landscape · 16:9", "Short · 9:16", "Carousel · 4:5"]) {
     const editor = page
       .locator("section.variant-editor")

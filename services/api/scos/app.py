@@ -116,7 +116,11 @@ def ready(c=Depends(db)):
         "environment": ENV,
         "details": {
             "database": "postgresql",
-            "storage": "private Supabase Storage" if config.DATA_PROVIDER == "supabase" else "durable private S3" if config.HOSTED else "private S3 emulator",
+            "storage": "private Supabase Storage"
+            if config.DATA_PROVIDER == "supabase"
+            else "durable private S3"
+            if config.HOSTED
+            else "private S3 emulator",
             "data_provider": config.DATA_PROVIDER,
             "auth_configured": config.auth_configured() if config.HOSTED else True,
             "live_publish": False,
@@ -215,9 +219,13 @@ def workspace(s=Depends(owner), c=Depends(db)):
     result["research_packages"] = clean(all_rows(c, "SELECT * FROM research_packages"))
     result["environment"] = ENV
     result["publishing_disabled"] = True
-    result["paid_calls_disabled"] = True
     result["data_provider"] = config.DATA_PROVIDER
     result["ai_provider"] = os.getenv("SCOS_AI_PROVIDER", "fixture")
+    from . import gemini
+
+    result["ai"] = gemini.readiness()
+    result["paid_calls_disabled"] = not result["ai"]["ready"]
+    result["ai_drafts"] = clean(all_rows(c, "SELECT * FROM ai_draft_calls ORDER BY created_at DESC LIMIT 100"))
     result["claim_blockers"] = {str(cl["id"]): claim_errors(c, cl["id"]) for cl in all_rows(c, "SELECT * FROM claims")}
     return result
 
@@ -434,12 +442,14 @@ def upload_asset(request: Request, file: UploadFile = File(...), s=Depends(owner
 
 @app.get("/api/v1/auth/config")
 def auth_config():
+    from . import gemini
+
     return {
         "environment": ENV,
         "local_login_allowed": ENV == "local",
         "oidc_configured": config.auth_configured(),
         "publishing_disabled": True,
-        "paid_calls_disabled": True,
+        "paid_calls_disabled": not gemini.readiness()["ready"],
     }
 
 
@@ -472,10 +482,19 @@ def oidc_callback(request: Request, code: str = "", state: str = ""):
 def supabase_callback(request: Request, code: str = ""):
     from . import supabase_auth
 
-    require(config.DATA_PROVIDER == "supabase" and config.auth_configured(), "AUTH_NOT_CONFIGURED", "Owner sign-in is not configured", 503)
+    require(
+        config.DATA_PROVIDER == "supabase" and config.auth_configured(),
+        "AUTH_NOT_CONFIGURED",
+        "Owner sign-in is not configured",
+        503,
+    )
     cookie = request.cookies.get(supabase_auth.LOGIN_COOKIE, "")
-    require(code and len(code) <= 4096 and len(cookie) <= 256 and cookie.count(".") == 1,
-            "AUTH_STATE_INVALID", "Google sign-in was cancelled, expired or opened in a different browser", 403)
+    require(
+        code and len(code) <= 4096 and len(cookie) <= 256 and cookie.count(".") == 1,
+        "AUTH_STATE_INVALID",
+        "Google sign-in was cancelled, expired or opened in a different browser",
+        403,
+    )
     state, browser = cookie.split(".")
     login_state = identity.consume_state(state, browser)
     claims = supabase_auth.exchange_code(code, login_state)
@@ -485,3 +504,57 @@ def supabase_callback(request: Request, code: str = ""):
         user = identity.owner_from_identity(c, claims, issuer=config.SUPABASE_URL + "/auth/v1")
         identity.issue_session(c, response, user["id"], lifetime_seconds=3600)
     return response
+
+
+class AIDraftRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_input_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+@app.get("/api/v1/variants/{id}/ai/quote")
+def ai_quote(id: UUID, s=Depends(owner), c=Depends(db)):
+    from . import gemini
+
+    snapshot = gemini.context(c, id)
+    p = gemini.price()
+    return {
+        "input_sha256": gemini.sha(snapshot),
+        "maximum_cost_usd": str(gemini.estimate(gemini.body_for(snapshot), p)),
+        "readiness": gemini.readiness(),
+        "approval_required": True,
+    }
+
+
+@app.post("/api/v1/variants/{id}/ai/draft")
+def ai_draft(id: UUID, body: AIDraftRequest, request: Request, s=Depends(owner)):
+    from . import gemini
+
+    return gemini.generate(id, s["user_id"], request.headers.get("idempotency-key"), body.expected_input_hash)
+
+
+@app.post("/api/v1/ai/drafts/{id}/apply")
+def ai_apply(id: UUID, request: Request, s=Depends(owner), c=Depends(db)):
+    from . import gemini
+
+    draft = one(c, "SELECT * FROM ai_draft_calls WHERE id=%s FOR UPDATE", (id,))
+    require(draft and str(draft["actor_id"]) == str(s["user_id"]), "NOT_FOUND", "Draft not found", 404)
+    if draft["status"] == "applied":
+        return {"status": "already_applied"}
+    require(draft["status"] == "succeeded", "AI_OUTPUT_INVALID", "Only a completed draft can be applied")
+    snapshot = gemini.context(c, draft["variant_id"])
+    require(
+        gemini.sha(snapshot) == draft["input_sha256"],
+        "CONFLICT_REVISION",
+        "Research or script inputs changed; this draft is stale",
+    )
+    sentences = [{**line, "sentence_id": "s" + str(i + 1)} for i, line in enumerate(draft["output"]["sentences"])]
+    result = execute(
+        c,
+        "script.save",
+        draft["variant_id"],
+        {"expected_revision": snapshot["script_revision"], "sentences": sentences},
+        str(s["user_id"]),
+        request.headers.get("idempotency-key"),
+    )
+    c.execute("UPDATE ai_draft_calls SET status='applied' WHERE id=%s", (id,))
+    return result

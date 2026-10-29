@@ -6,7 +6,7 @@ Baseline: `175c5a5`. Every FR-001..030, AT-001..060 and NFR target is inventorie
 
 | ID | Status | Evidence and remaining work |
 |---|---|---|
-| FR-001 | partially_implemented_or_verified | Independent local stack preserved; Google owner OIDC implemented and security-tested, but real OAuth registration/consent remains required. |
+| FR-001 | partially_implemented_or_verified | Independent local stack preserved; private Supabase schema, Google PKCE owner flow and Vercel/Railway staging deployed. Real Google provider setup/owner consent remains required. |
 | FR-002 | partially_implemented_or_verified | Manual ideas and excerpts only; compliant live discovery is not implemented. |
 | FR-003 | not_implemented | Reference metadata monitors and competitor inventory not implemented. |
 | FR-004 | partially_implemented_or_verified | Unknown demand and counterevidence are labeled; no observed opportunity-ranking engine. |
@@ -31,7 +31,7 @@ Baseline: `175c5a5`. Every FR-001..030, AT-001..060 and NFR target is inventorie
 | FR-023 | not_implemented | Drive resumable archive adapter not implemented. |
 | FR-024 | partially_implemented_or_verified | Synthetic comments, exact-text review and individually deduplicated mock replies; live comment sync absent. |
 | FR-025 | partially_implemented_or_verified | Synthetic provenance/null metrics and experiment registration; mature cohort diagnostics and real evidence-based recommendations absent. |
-| FR-026 | partially_implemented_or_verified | Atomic budget-reservation concurrency tests and zero-dollar default; no priced live model provider or settlement integration. |
+| FR-026 | partially_implemented_or_verified | Gemini REST drafting, strict output validation, durable call intents, UTC daily/monthly budget reservations and usage settlement implemented with fault/concurrency tests. Current dated pricing is pinned; no real paid call until the owner's key and spending caps are configured. |
 | FR-027 | partially_implemented_or_verified | Durable leases/fencing, queue cancellation and event inbox; full running-render stop, dead-letter and fault matrix incomplete. |
 | FR-028 | partially_implemented_or_verified | Local backup/isolated restore verified; hosted PITR/retention/monitoring and disaster recovery not release-verified. |
 | FR-029 | partially_implemented_or_verified | Committed browser/media E2E now present; full AT-001..060 release suite and hosted owner workflow not yet verified. |

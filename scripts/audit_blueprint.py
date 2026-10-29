@@ -6,7 +6,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 fr_notes = {
-    1: "Independent local stack preserved; Google owner OIDC implemented and security-tested, but real OAuth registration/consent remains required.",
+    1: "Independent local stack preserved; private Supabase schema, Google PKCE owner flow and Vercel/Railway staging deployed. Real Google provider setup/owner consent remains required.",
     2: "Manual ideas and excerpts only; compliant live discovery is not implemented.",
     3: "Reference metadata monitors and competitor inventory not implemented.",
     4: "Unknown demand and counterevidence are labeled; no observed opportunity-ranking engine.",
@@ -31,7 +31,7 @@ fr_notes = {
     23: "Drive resumable archive adapter not implemented.",
     24: "Synthetic comments, exact-text review and individually deduplicated mock replies; live comment sync absent.",
     25: "Synthetic provenance/null metrics and experiment registration; mature cohort diagnostics and real evidence-based recommendations absent.",
-    26: "Atomic budget-reservation concurrency tests and zero-dollar default; no priced live model provider or settlement integration.",
+    26: "Gemini REST drafting, strict output validation, durable call intents, UTC daily/monthly budget reservations and usage settlement implemented with fault/concurrency tests. Current dated pricing is pinned; no real paid call until the owner's key and spending caps are configured.",
     27: "Durable leases/fencing, queue cancellation and event inbox; full running-render stop, dead-letter and fault matrix incomplete.",
     28: "Local backup/isolated restore verified; hosted PITR/retention/monitoring and disaster recovery not release-verified.",
     29: "Committed browser/media E2E now present; full AT-001..060 release suite and hosted owner workflow not yet verified.",

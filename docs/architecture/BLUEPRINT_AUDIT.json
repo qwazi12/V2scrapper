@@ -8,7 +8,7 @@
       "requirement": "Independent app bootstrap; owner account; separate credentials",
       "priority": "P0; start with old project offline",
       "status": "partially_implemented_or_verified",
-      "evidence_and_gap": "Independent local stack preserved; Google owner OIDC implemented and security-tested, but real OAuth registration/consent remains required."
+      "evidence_and_gap": "Independent local stack preserved; private Supabase schema, Google PKCE owner flow and Vercel/Railway staging deployed. Real Google provider setup/owner consent remains required."
     },
     {
       "id": "FR-002",
@@ -183,7 +183,7 @@
       "requirement": "Budget reservations, provider quotas, model usage ledger",
       "priority": "P0; parallel calls cannot overspend cap unchecked",
       "status": "partially_implemented_or_verified",
-      "evidence_and_gap": "Atomic budget-reservation concurrency tests and zero-dollar default; no priced live model provider or settlement integration."
+      "evidence_and_gap": "Gemini REST drafting, strict output validation, durable call intents, UTC daily/monthly budget reservations and usage settlement implemented with fault/concurrency tests. Current dated pricing is pinned; no real paid call until the owner's key and spending caps are configured."
     },
     {
       "id": "FR-027",
